@@ -2,7 +2,7 @@
 // 매월 업데이트 시 이 파일도 함께 갱신
 
 var BRAND_CRITERIA = {
-  lastUpdated: '2026-04-15',
+  lastUpdated: '2026-04-27',
 
   brands: {
     '일룸': {
