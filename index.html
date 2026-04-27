@@ -1079,17 +1079,10 @@ function _extractKeywords(s) {
 
 function findSalesData(brand, storeName, storeRegion) {
   if (typeof SALES_DATA === 'undefined') return null;
-  // 1. 정확한 이름 매칭
-  var match = SALES_DATA.find(function(d) { return d.brand === brand && d.store === storeName; });
-  if (match) return match;
-  // 2. 부분 매칭
-  match = SALES_DATA.find(function(d) { return d.brand === brand && (d.store.indexOf(storeName) !== -1 || storeName.indexOf(d.store) !== -1); });
-  if (match) return match;
-  // 3. 수기 매핑 테이블 (마커 → sales 매장명)
+  // 1. 수기 매핑 테이블 (최우선 — 같은 매장의 다른 ID 합산 등 자동매칭으로 못 잡는 케이스)
   if (typeof MARKER_TO_SALES !== 'undefined' && MARKER_TO_SALES[brand] && MARKER_TO_SALES[brand][storeName]) {
     var target = MARKER_TO_SALES[brand][storeName];
     if (Array.isArray(target)) {
-      // 여러 sales 합산 (울산4+울산5 같은 케이스)
       var merged = null;
       target.forEach(function(t) {
         var f = SALES_DATA.find(function(d) { return d.brand === brand && d.store === t; });
@@ -1104,6 +1097,12 @@ function findSalesData(brand, storeName, storeRegion) {
       if (explicit) return explicit;
     }
   }
+  // 2. 정확한 이름 매칭
+  var match = SALES_DATA.find(function(d) { return d.brand === brand && d.store === storeName; });
+  if (match) return match;
+  // 3. 부분 매칭
+  match = SALES_DATA.find(function(d) { return d.brand === brand && (d.store.indexOf(storeName) !== -1 || storeName.indexOf(d.store) !== -1); });
+  if (match) return match;
   // 4. 키워드 + region 매칭
   if (storeRegion) {
     var markerKw = _extractKeywords(storeName);
