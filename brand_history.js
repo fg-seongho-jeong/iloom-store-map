@@ -47,7 +47,7 @@ var BRAND_CRITERIA = {
     },
 
     '까사미아': {
-      count: 108,
+      count: 107,
       source: '까사미아 공식몰 (casamiamall.com)',
       filterType: '전체 매장 (대리점 + 직영점 + 기타유통)',
       officialCount: 134,
@@ -57,9 +57,10 @@ var BRAND_CRITERIA = {
         { name: '카르페디엠베드 신세계강남점', reason: '매트리스 전문', type: 'blocklist' },
         { name: '팩토리아울렛 용인점', reason: '자체 아울렛', type: 'blocklist' },
         { name: '아울렛울산대리점', reason: '자체 아울렛 (울산)', type: 'blocklist' },
-        { name: '아울렛 기흥대리점', reason: '자체 아울렛 (기흥)', type: 'blocklist' }
+        { name: '아울렛 기흥대리점', reason: '자체 아울렛 (기흥)', type: 'blocklist' },
+        { name: '서대구대리점', reason: '자체 아울렛 (실질적 아울렛)', type: 'blocklist' }
       ],
-      notes: '자체 아울렛("아울렛"으로 시작) 자동 제외. 백화점 입점 아울렛(신세계사이먼/현대/롯데)은 포함.'
+      notes: '자체 아울렛("아울렛"으로 시작 또는 서대구) 제외. 백화점 입점 아울렛(신세계사이먼/현대/롯데)은 포함.'
     },
 
     '에몬스': {
@@ -75,6 +76,14 @@ var BRAND_CRITERIA = {
 
 // 월별 변경 이력
 var BRAND_HISTORY = [
+  {
+    date: '2026-04-27',
+    summary: 'Google Sheets API 매출 데이터 동기화 + 매칭 강화',
+    events: [
+      { brand: '까사미아', type: 'blocked', name: '서대구대리점', reason: '자체 아울렛 — 블랙리스트 추가' },
+      { brand: '까사미아', type: 'note', name: '마테라소 매장', reason: '매트리스 전문 브랜드 → 가구 매장 분석에서 제외 (sync 시 자동 필터링)' }
+    ]
+  },
   {
     date: '2026-04-15',
     summary: '자동화 첫 크롤링 결과 정리',

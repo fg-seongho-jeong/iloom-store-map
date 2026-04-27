@@ -17,6 +17,7 @@
 <script src="population_data.js"></script>
 <script src="district_boundaries.js"></script>
 <script src="brand_history.js"></script>
+<script src="marker_to_sales.js"></script>
 <style>
   :root {
     --bg: #0d0f14;
@@ -1061,15 +1062,19 @@ function updateMarkers() {
 // ══════════════════════════════════════════
 // 매출 데이터 매칭 + 거리 계산
 // ══════════════════════════════════════════
-// 매장명 키워드 추출: 브랜드명/접미어 제거 후 한글 단어
+// 매장명 키워드 추출: 브랜드명/접미어/백화점prefix 제거 후 한글 단어
+// 백화점 약어 매핑: 신세계↔S, 롯데↔L, 갤러리아↔G, AK플라자↔AK, 현대↔H
 function _extractKeywords(s) {
   var cleaned = String(s || '')
     .replace(/까사미아|마테라소|한샘|리바트|에몬스|일룸|현대리바트|리빙파워센터|플래그십/g, '')
-    .replace(/위탁|대리점|직매장|직영점|직영|전시장|아울렛|샵$|쇼룸|팝업|매장|본사/g, '')
+    .replace(/위탁|대리점|직매장|직영점|직영|전시장|샵$|쇼룸|팝업|매장|본사/g, '')
     .replace(/\([^)]*\)/g, '')
-    .replace(/점$/, '')
+    .replace(/신세계프리미엄아울렛|신세계사이먼|롯데프리미엄아울렛|롯데아울렛|롯데백화점|롯데몰|롯데|신세계|갤러리아|AK플라자|현대백화점|현대아울렛|스타필드시티|스타필드|이마트타운|디지털프라자/g, '')
+    .replace(/(^|\s)([SLGH])(?=[가-힣])/g, '$1')
+    .replace(/(^|\s)AK(?=[가-힣])/g, '$1')
+    .replace(/점$|아울렛/g, '')
     .trim();
-  return cleaned.split(/\s+|[\-,_]/).filter(function(w) { return w.length >= 2; });
+  return cleaned.split(/\s+|[\-,_]/).filter(function(w) { return w.length >= 1; });
 }
 
 function findSalesData(brand, storeName, storeRegion) {
