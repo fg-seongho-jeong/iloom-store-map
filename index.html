@@ -1061,14 +1061,73 @@ function updateMarkers() {
 // ══════════════════════════════════════════
 // 매출 데이터 매칭 + 거리 계산
 // ══════════════════════════════════════════
-function findSalesData(brand, storeName) {
+// 매장명 키워드 추출: 브랜드명/접미어 제거 후 한글 단어
+function _extractKeywords(s) {
+  var cleaned = String(s || '')
+    .replace(/까사미아|마테라소|한샘|리바트|에몬스|일룸|현대리바트|리빙파워센터|플래그십/g, '')
+    .replace(/위탁|대리점|직매장|직영점|직영|전시장|아울렛|샵$|쇼룸|팝업|매장|본사/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/점$/, '')
+    .trim();
+  return cleaned.split(/\s+|[\-,_]/).filter(function(w) { return w.length >= 2; });
+}
+
+function findSalesData(brand, storeName, storeRegion) {
   if (typeof SALES_DATA === 'undefined') return null;
-  // 정확한 이름 매칭
+  // 1. 정확한 이름 매칭
   var match = SALES_DATA.find(function(d) { return d.brand === brand && d.store === storeName; });
   if (match) return match;
-  // 부분 매칭
+  // 2. 부분 매칭
   match = SALES_DATA.find(function(d) { return d.brand === brand && (d.store.indexOf(storeName) !== -1 || storeName.indexOf(d.store) !== -1); });
-  return match || null;
+  if (match) return match;
+  // 3. 수기 매핑 테이블 (마커 → sales 매장명)
+  if (typeof MARKER_TO_SALES !== 'undefined' && MARKER_TO_SALES[brand] && MARKER_TO_SALES[brand][storeName]) {
+    var target = MARKER_TO_SALES[brand][storeName];
+    if (Array.isArray(target)) {
+      // 여러 sales 합산 (울산4+울산5 같은 케이스)
+      var merged = null;
+      target.forEach(function(t) {
+        var f = SALES_DATA.find(function(d) { return d.brand === brand && d.store === t; });
+        if (!f) return;
+        if (!merged) merged = { brand: brand, store: storeName, region: f.region, area: f.area, s24: 0, s25: 0, monthly: [] };
+        merged.s24 += (f.s24 || 0); merged.s25 += (f.s25 || 0);
+        if (f.monthly) merged.monthly = merged.monthly.concat(f.monthly);
+      });
+      if (merged) return merged;
+    } else {
+      var explicit = SALES_DATA.find(function(d) { return d.brand === brand && d.store === target; });
+      if (explicit) return explicit;
+    }
+  }
+  // 4. 키워드 + region 매칭
+  if (storeRegion) {
+    var markerKw = _extractKeywords(storeName);
+    if (markerKw.length > 0) {
+      var candidates = SALES_DATA.filter(function(d) {
+        if (d.brand !== brand) return false;
+        if (d.region !== storeRegion) return false;
+        var sk = _extractKeywords(d.store);
+        return markerKw.some(function(k) {
+          return sk.some(function(s) { return s.indexOf(k) >= 0 || k.indexOf(s) >= 0; });
+        });
+      });
+      if (candidates.length === 1) return candidates[0];
+      if (candidates.length > 1) {
+        // 점수: 키워드 일치 × 100 + 매출 있음 × 10
+        candidates.forEach(function(c) {
+          var ckw = _extractKeywords(c.store);
+          var kwScore = markerKw.filter(function(k) {
+            return ckw.some(function(s) { return s.indexOf(k) >= 0 || k.indexOf(s) >= 0; });
+          }).length;
+          var hasSales = (c.s24 > 0 || c.s25 > 0) ? 1 : 0;
+          c._score = kwScore * 100 + hasSales * 10;
+        });
+        candidates.sort(function(a, b) { return b._score - a._score; });
+        return candidates[0];
+      }
+    }
+  }
+  return null;
 }
 
 function calcDistance(lat1, lng1, lat2, lng2) {
@@ -1094,7 +1153,7 @@ function findNearbyCompetitors(store, radiusKm) {
     if (s.brand === store.brand) return;
     var dist = calcDistance(store.lat, store.lng, s.lat, s.lng);
     if (dist <= radiusKm) {
-      var sales = findSalesData(s.brand, s.name);
+      var sales = findSalesData(s.brand, s.name, s.region);
       nearby.push({ store: s, dist: dist, sales: sales });
     }
   });
@@ -1122,7 +1181,7 @@ function selectStore(id) {
 
   // 매출 데이터
   var salesHtml = '';
-  var mySales = findSalesData(store.brand, store.name);
+  var mySales = findSalesData(store.brand, store.name, store.region);
   if (mySales) {
     var change = mySales.s25 - mySales.s24;
     var changePct = mySales.s24 ? ((change / mySales.s24) * 100).toFixed(1) : 0;
@@ -1315,7 +1374,7 @@ function runCompare() {
   }).filter(Boolean);
 
   var rows = stores.map(function(s) {
-    var sales = findSalesData(s.brand, s.name);
+    var sales = findSalesData(s.brand, s.name, s.region);
     return { store: s, sales: sales };
   });
 
@@ -1384,7 +1443,7 @@ function showRegionDashboard(region) {
     if (!isAll && s.region !== region) return;
     if (!data[s.brand]) return;
     data[s.brand].count++;
-    var sales = findSalesData(s.brand, s.name);
+    var sales = findSalesData(s.brand, s.name, s.region);
     if (sales) {
       if (sales.s25 > 0) data[s.brand].s25 += sales.s25;
       if (sales.s24 > 0) data[s.brand].s24 += sales.s24;
@@ -1577,7 +1636,7 @@ function renderBrandEfficiencyTab(brand, region, bc) {
     if (data[s.brand] === undefined) return;
     if (!isAll && s.region !== region) return;
     data[s.brand].count++;
-    var sales = findSalesData(s.brand, s.name);
+    var sales = findSalesData(s.brand, s.name, s.region);
     if (sales && sales.s25 > 0) data[s.brand].s25 += sales.s25;
   });
 
@@ -1657,7 +1716,7 @@ function renderBrandSalesTab(brand, region, bc) {
   allStores.forEach(function(s) {
     if (s.brand !== brand) return;
     if (!isAll && s.region !== region) return;
-    storeList.push({ store: s, sales: findSalesData(s.brand, s.name) });
+    storeList.push({ store: s, sales: findSalesData(s.brand, s.name, s.region) });
   });
   storeList.sort(function(a, b) {
     var sa = (a.sales && a.sales.s25 > 0) ? a.sales.s25 : 0;
@@ -1837,7 +1896,7 @@ function updateRadius(val) {
 
   // 경쟁사 목록 + 바차트만 갱신
   var nearby = findNearbyCompetitors(store, currentRadius);
-  var mySales = findSalesData(store.brand, store.name);
+  var mySales = findSalesData(store.brand, store.name, store.region);
   var compHtml = '';
   if (nearby.length > 0) {
     var barData = [];
@@ -1901,7 +1960,7 @@ function drawHeatmap() {
   allStores.forEach(function(s) {
     if (!activeBrands[s.brand]) return;
     if (!s.region) return;
-    var sales = findSalesData(s.brand, s.name);
+    var sales = findSalesData(s.brand, s.name, s.region);
     if (!sales) return;
     if (!regionSales[s.region]) regionSales[s.region] = { s24: 0, s25: 0, count: 0, byBrand: {} };
     var r = regionSales[s.region];
