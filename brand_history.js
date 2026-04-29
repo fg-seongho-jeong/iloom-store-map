@@ -77,6 +77,15 @@ var BRAND_CRITERIA = {
 // 월별 변경 이력
 var BRAND_HISTORY = [
   {
+    date: '2026-04-29',
+    summary: '매출 데이터 정합성 강화 (명칭 변경 페어 합산 + 본사 채널 제외)',
+    events: [
+      { brand: '한샘', type: 'note', name: '마포/방배 매출', reason: '본사 사옥/B2B 채널 추정 (마커 없음) → 매장 분석에서 제외 (sync 필터)' },
+      { brand: '한샘', type: 'note', name: '24-25년 명칭 변경 매장', reason: 'X → X직매장/표준가구로 sales 데이터 분리 → marker_to_sales.js에서 합산 매핑' },
+      { brand: '에몬스', type: 'note', name: '용산 아이파크', reason: '"외부인판매(아이파크_X)" 시리즈 모두 용산 아이파크 매장 매출 채널' }
+    ]
+  },
+  {
     date: '2026-04-27',
     summary: 'Google Sheets API 매출 데이터 동기화 + 매칭 강화',
     events: [
