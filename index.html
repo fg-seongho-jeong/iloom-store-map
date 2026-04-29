@@ -1500,7 +1500,11 @@ function showRegionDashboard(region) {
   }
   // 마지막 업데이트 표시
   if (typeof BRAND_CRITERIA !== 'undefined' && BRAND_CRITERIA.lastUpdated) {
-    html += '<div style="font-size:12px;color:#cbd5e1;margin-bottom:14px;padding-right:40px;">매장 데이터 기준: <strong style="color:#fff;font-family:DM Mono,monospace;">' + BRAND_CRITERIA.lastUpdated + '</strong> 업데이트</div>';
+    var dataInfo = '매장 데이터 기준: <strong style="color:#fff;font-family:DM Mono,monospace;">' + BRAND_CRITERIA.lastUpdated + '</strong> 업데이트';
+    if (typeof SALES_META !== 'undefined' && SALES_META.latestMonth) {
+      dataInfo += ' · 매출 데이터: <strong style="color:#fff;font-family:DM Mono,monospace;">' + SALES_META.latestMonth + '</strong>까지';
+    }
+    html += '<div style="font-size:12px;color:#cbd5e1;margin-bottom:14px;padding-right:40px;">' + dataInfo + '</div>';
   }
 
   html += '<div class="rd-grid">';
