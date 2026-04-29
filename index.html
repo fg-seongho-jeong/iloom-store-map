@@ -480,7 +480,14 @@
     </div>
     <!-- 성장률 범례 -->
     <div class="heatmap-legend" id="heatmapLegend">
-      <div class="legend-title">지역별 매출 성장률 (25/24)</div>
+      <div class="legend-title">지역별 매출 성장률</div>
+      <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">
+        <button class="period-btn active" data-period="yoy_full" onclick="setGrowthPeriod('yoy_full')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4b5563;background:#3b82f6;color:#fff;cursor:pointer;font-family:inherit;">연간 (25/24)</button>
+        <button class="period-btn" data-period="rolling12m" onclick="setGrowthPeriod('rolling12m')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4b5563;background:transparent;color:#cbd5e1;cursor:pointer;font-family:inherit;">최근12개월</button>
+        <button class="period-btn" data-period="recent3m" onclick="setGrowthPeriod('recent3m')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4b5563;background:transparent;color:#cbd5e1;cursor:pointer;font-family:inherit;">최근3개월</button>
+        <button class="period-btn" data-period="recent1m" onclick="setGrowthPeriod('recent1m')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4b5563;background:transparent;color:#cbd5e1;cursor:pointer;font-family:inherit;">최근1개월</button>
+      </div>
+      <div id="periodLabel" style="font-size:10px;color:#94a3b8;margin-bottom:6px;">25년 전체 vs 24년 전체</div>
       <div class="legend-row"><div class="legend-circle" style="width:14px;height:14px;background:#6ee7b7;border-radius:3px;"></div> +10% 이상</div>
       <div class="legend-row"><div class="legend-circle" style="width:14px;height:14px;background:#a7f3d0;border-radius:3px;"></div> +5% ~ +10%</div>
       <div class="legend-row"><div class="legend-circle" style="width:14px;height:14px;background:#bfdbfe;border-radius:3px;"></div> 0 ~ +5%</div>
@@ -1960,24 +1967,101 @@ function growthColor(pct, hasData) {
   return '#fca5a5';                    // 파스텔 빨강 (-10% 미만)
 }
 
+// 성장률 기간 선택 (전역)
+var growthPeriod = 'yoy_full'; // yoy_full | rolling12m | recent3m | recent1m
+
+// 'YYYY-MM' 문자열 ±N개월 계산
+function shiftMonth(ym, delta) {
+  var p = ym.split('-');
+  var y = parseInt(p[0], 10), m = parseInt(p[1], 10);
+  var total = y * 12 + (m - 1) + delta;
+  return Math.floor(total / 12) + '-' + String(total % 12 + 1).padStart(2, '0');
+}
+
+// 매장 monthly에서 [from, to] 범위 매출 합산 (양 끝 포함)
+function sumMonthly(monthly, from, to) {
+  if (!monthly) return 0;
+  var sum = 0;
+  for (var i = 0; i < monthly.length; i++) {
+    var m = monthly[i];
+    if (m.m >= from && m.m <= to) sum += (m.s || 0);
+  }
+  return sum;
+}
+
+// 기간별 (prev, curr) 산출 — 매장 단위 sales에서
+function aggregatePeriod(sales) {
+  if (!sales) return { prev: 0, curr: 0 };
+  if (growthPeriod === 'yoy_full') {
+    return { prev: sales.s24 || 0, curr: sales.s25 || 0 };
+  }
+  // 가장 최신 월 (전역 SALES_META 또는 sales.monthly에서)
+  var latest = (typeof SALES_META !== 'undefined' && SALES_META.latestMonth) ? SALES_META.latestMonth : null;
+  if (!latest && sales.monthly && sales.monthly.length) {
+    latest = sales.monthly.map(function(m) { return m.m; }).sort().pop();
+  }
+  if (!latest) return { prev: 0, curr: 0 };
+
+  if (growthPeriod === 'rolling12m') {
+    // 최근 12개월 vs 직전 12개월
+    var c1 = shiftMonth(latest, -11), c2 = latest;
+    var p1 = shiftMonth(latest, -23), p2 = shiftMonth(latest, -12);
+    return { prev: sumMonthly(sales.monthly, p1, p2), curr: sumMonthly(sales.monthly, c1, c2) };
+  }
+  if (growthPeriod === 'recent3m') {
+    var cc1 = shiftMonth(latest, -2), cc2 = latest;
+    var pp1 = shiftMonth(latest, -14), pp2 = shiftMonth(latest, -12);
+    return { prev: sumMonthly(sales.monthly, pp1, pp2), curr: sumMonthly(sales.monthly, cc1, cc2) };
+  }
+  if (growthPeriod === 'recent1m') {
+    var p1m = shiftMonth(latest, -12);
+    return { prev: sumMonthly(sales.monthly, p1m, p1m), curr: sumMonthly(sales.monthly, latest, latest) };
+  }
+  return { prev: sales.s24 || 0, curr: sales.s25 || 0 };
+}
+
+function setGrowthPeriod(p) {
+  growthPeriod = p;
+  // 버튼 활성화 토글
+  document.querySelectorAll('.period-btn').forEach(function(b) {
+    var on = b.dataset.period === p;
+    b.classList.toggle('active', on);
+    b.style.background = on ? '#3b82f6' : 'transparent';
+    b.style.color = on ? '#fff' : '#cbd5e1';
+  });
+  // 라벨 업데이트
+  var latest = (typeof SALES_META !== 'undefined' && SALES_META.latestMonth) ? SALES_META.latestMonth : '?';
+  var labels = {
+    yoy_full: '25년 전체 vs 24년 전체',
+    rolling12m: '최근 12개월 vs 직전 12개월',
+    recent3m: latest + ' 기준 최근 3개월 vs 1년 전 동기간',
+    recent1m: latest + ' vs 1년 전 동월'
+  };
+  var lbl = document.getElementById('periodLabel');
+  if (lbl) lbl.textContent = labels[p] || '';
+  // 활성 상태면 다시 그리기
+  if (heatmapActive) { clearHeatmap(); drawHeatmap(); }
+}
+
 function drawHeatmap() {
   if (typeof DISTRICT_BOUNDARIES === 'undefined') return;
 
-  // 1) 지역별 24/25 매출 집계 (전체 + 브랜드별)
+  // 1) 지역별 매출 집계 (선택 기간 기준, 전체 + 브랜드별)
   var regionSales = {};
   allStores.forEach(function(s) {
     if (!activeBrands[s.brand]) return;
     if (!s.region) return;
     var sales = findSalesData(s.brand, s.name, s.region);
     if (!sales) return;
+    var p = aggregatePeriod(sales);
     if (!regionSales[s.region]) regionSales[s.region] = { s24: 0, s25: 0, count: 0, byBrand: {} };
     var r = regionSales[s.region];
-    if (sales.s24 > 0) r.s24 += sales.s24;
-    if (sales.s25 > 0) r.s25 += sales.s25;
+    if (p.prev > 0) r.s24 += p.prev;
+    if (p.curr > 0) r.s25 += p.curr;
     r.count++;
     if (!r.byBrand[s.brand]) r.byBrand[s.brand] = { s24: 0, s25: 0 };
-    if (sales.s24 > 0) r.byBrand[s.brand].s24 += sales.s24;
-    if (sales.s25 > 0) r.byBrand[s.brand].s25 += sales.s25;
+    if (p.prev > 0) r.byBrand[s.brand].s24 += p.prev;
+    if (p.curr > 0) r.byBrand[s.brand].s25 += p.curr;
   });
 
   // 호버 툴팁 생성 (지도 위에 띄움)
@@ -1999,7 +2083,12 @@ function drawHeatmap() {
       '<strong style="color:' + pctColor + ';font-family:DM Mono,monospace;">' + pctStr + '</strong>' +
     '</div>';
     if (hasData) {
-      html += '<div style="color:#94a3b8;font-size:10px;margin-top:2px;">24년 ' + formatSales(rs.s24) + ' → 25년 ' + formatSales(rs.s25) + '</div>';
+      var prevLabel = '전기', currLabel = '당기';
+      if (growthPeriod === 'yoy_full') { prevLabel = '24년'; currLabel = '25년'; }
+      else if (growthPeriod === 'rolling12m') { prevLabel = '직전12개월'; currLabel = '최근12개월'; }
+      else if (growthPeriod === 'recent3m') { prevLabel = '1년전 3개월'; currLabel = '최근 3개월'; }
+      else if (growthPeriod === 'recent1m') { prevLabel = '1년전 동월'; currLabel = '최신월'; }
+      html += '<div style="color:#94a3b8;font-size:10px;margin-top:2px;">' + prevLabel + ' ' + formatSales(rs.s24) + ' → ' + currLabel + ' ' + formatSales(rs.s25) + '</div>';
       // 브랜드별 분해
       var brandRows = '';
       brandOrder.forEach(function(b) {
