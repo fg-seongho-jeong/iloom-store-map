@@ -1,4 +1,4 @@
-name: 매월 매장 크롤링
+name: 매월 매장 크롤링 + 매출 동기화
 
 on:
   schedule:
@@ -63,3 +63,62 @@ jobs:
           labels: |
             monthly-update
             review-needed
+
+  # ───────────────────────────────────────
+  # 매출 데이터 자동 동기화 (Google Sheets API)
+  # ───────────────────────────────────────
+  sync-sales:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 첫 영업일 확인
+        id: check
+        run: node scripts/is_first_biz_day.js
+
+      - name: 매출 데이터 동기화 (API에서 fetch)
+        if: steps.check.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
+        run: node sync_sales.js --fetch
+
+      - name: 신규 파일 적용
+        if: steps.check.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          [ -f sales_data.js.new ] && mv sales_data.js.new sales_data.js || echo "sales_data 변경 없음"
+          [ -f brand_history.js.new ] && mv brand_history.js.new brand_history.js || echo "brand_history 변경 없음"
+
+      - name: 변경사항 감지 + 커밋
+        if: steps.check.outputs.run == 'true' || github.event_name == 'workflow_dispatch'
+        id: salescommit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet sales_data.js brand_history.js 2>/dev/null; then
+            echo "변경 없음"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            git add sales_data.js brand_history.js
+            git commit -m "매출 데이터 동기화 (${{ steps.check.outputs.month }})"
+            git push origin main
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sync 리포트 GitHub Issue 생성
+        if: (steps.check.outputs.run == 'true' || github.event_name == 'workflow_dispatch') && steps.salescommit.outputs.changed == 'true'
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: "💰 ${{ steps.check.outputs.month }} 매출 데이터 동기화 결과"
+          content-filepath: ./sync_report.md
+          labels: |
+            monthly-update
+            sales-sync
