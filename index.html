@@ -268,14 +268,6 @@
     background: var(--accent); cursor: pointer; border: 2px solid var(--surface);
   }
   .radius-val { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent); min-width: 36px; text-align: right; }
-  /* 도우미 패널 빠른 검색 칩 */
-  .quick-chip {
-    display: inline-block; font-size: 11px; padding: 3px 9px; border-radius: 12px;
-    background: var(--surface2); border: 1px solid var(--border); color: #cbd5e1;
-    cursor: pointer; transition: all 0.15s;
-  }
-  .quick-chip:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
-
   /* 히트맵 범례 */
   .heatmap-legend {
     position: absolute; bottom: 24px; left: 24px; background: var(--surface); border: 1px solid var(--border);
@@ -474,34 +466,6 @@
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"/><path d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10m10 0H3m10 0h2m0 0a1 1 0 011-1V8h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V15a1 1 0 01-1 1h-1"/></svg>
         출고지
       </button>
-      <button class="toolbar-btn" id="btnHelper" onclick="toggleHelper()">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        지역 검색
-      </button>
-    </div>
-    <!-- 도우미 패널: 키워드 입력 시 매출/매장 요약 -->
-    <div class="helper-panel" id="helperPanel" style="display:none;position:absolute;top:88px;right:16px;width:380px;max-height:calc(100vh - 110px);background:var(--surface);border:1px solid var(--border);border-radius:10px;z-index:300;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.4);display:flex;flex-direction:column;">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--surface2);">
-        <div style="font-size:14px;font-weight:700;color:#fff;">🔍 지역 검색 도우미</div>
-        <button onclick="toggleHelper()" style="background:transparent;border:none;color:#94a3b8;font-size:18px;cursor:pointer;line-height:1;">&#10005;</button>
-      </div>
-      <div style="padding:14px 16px;border-bottom:1px solid var(--border);">
-        <input type="text" id="helperInput" placeholder="예: 천안, 수원시, 송파구, 광교..." oninput="renderHelperResults()" style="width:100%;padding:10px 12px;font-size:14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:#fff;font-family:inherit;outline:none;">
-        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">
-          <span style="font-size:11px;color:#94a3b8;">빠른 검색:</span>
-          <span class="quick-chip" onclick="quickSearch('천안')">천안</span>
-          <span class="quick-chip" onclick="quickSearch('수원')">수원</span>
-          <span class="quick-chip" onclick="quickSearch('광교')">광교</span>
-          <span class="quick-chip" onclick="quickSearch('송파')">송파</span>
-          <span class="quick-chip" onclick="quickSearch('강남')">강남</span>
-          <span class="quick-chip" onclick="quickSearch('동탄')">동탄</span>
-          <span class="quick-chip" onclick="quickSearch('일산')">일산</span>
-          <span class="quick-chip" onclick="quickSearch('부산')">부산</span>
-        </div>
-      </div>
-      <div id="helperResults" style="overflow-y:auto;padding:14px 16px;flex:1;font-size:13px;color:#cbd5e1;">
-        <div style="color:#6b7280;text-align:center;padding:30px 0;">키워드를 입력하면<br>관련 매장과 매출을 보여드려요</div>
-      </div>
     </div>
     <!-- 비교 모드 바 -->
     <div class="compare-bar" id="compareBar">
@@ -2618,145 +2582,6 @@ function toggleShipment() {
   }
 }
 
-// ══════════════════════════════════════════
-// 도우미 (지역 검색)
-// ══════════════════════════════════════════
-function toggleHelper() {
-  var panel = document.getElementById('helperPanel');
-  var btn = document.getElementById('btnHelper');
-  var isOpen = panel.style.display !== 'none' && panel.style.display !== '';
-  if (isOpen) {
-    panel.style.display = 'none';
-    btn.classList.remove('active');
-  } else {
-    panel.style.display = 'flex';
-    btn.classList.add('active');
-    setTimeout(function() { document.getElementById('helperInput').focus(); }, 100);
-  }
-}
-
-function quickSearch(kw) {
-  document.getElementById('helperInput').value = kw;
-  renderHelperResults();
-}
-
-function renderHelperResults() {
-  var q = document.getElementById('helperInput').value.trim();
-  var results = document.getElementById('helperResults');
-  if (!q) {
-    results.innerHTML = '<div style="color:#6b7280;text-align:center;padding:30px 0;">키워드를 입력하면<br>관련 매장과 매출을 보여드려요</div>';
-    return;
-  }
-  var ql = q.toLowerCase();
-
-  // allStores에서 키워드 매칭 (브랜드/매장명/주소/지역/상권)
-  var matched = [];
-  allStores.forEach(function(s) {
-    var sales = findSalesData(s.brand, s.name, s.region);
-    var area = sales ? (sales.area || '') : '';
-    var hay = (s.brand + ' ' + s.name + ' ' + (s.addr || '') + ' ' + (s.region || '') + ' ' + area + ' ' + (s.place_name || '')).toLowerCase();
-    if (hay.indexOf(ql) !== -1) {
-      matched.push({ store: s, sales: sales, area: area });
-    }
-  });
-
-  if (matched.length === 0) {
-    results.innerHTML = '<div style="color:#6b7280;text-align:center;padding:30px 0;">"<strong style="color:#fff;">' + escapeHtml(q) + '</strong>" 검색 결과 없음<br><span style="font-size:11px;">매장명/지역/상권 키워드로 다시 시도해보세요</span></div>';
-    return;
-  }
-
-  // 집계
-  var totalCount = matched.length;
-  var byBrand = {};
-  var totalS24 = 0, totalS25 = 0;
-  var areas = {};
-  matched.forEach(function(m) {
-    var b = m.store.brand;
-    if (!byBrand[b]) byBrand[b] = { count: 0, s24: 0, s25: 0 };
-    byBrand[b].count++;
-    if (m.sales) {
-      byBrand[b].s24 += (m.sales.s24 || 0); byBrand[b].s25 += (m.sales.s25 || 0);
-      totalS24 += (m.sales.s24 || 0); totalS25 += (m.sales.s25 || 0);
-    }
-    if (m.area) areas[m.area] = (areas[m.area] || 0) + 1;
-  });
-
-  var brands = ['일룸', '한샘', '리바트', '까사미아', '에몬스'];
-  var growth = (totalS24 > 0) ? ((totalS25 - totalS24) / totalS24 * 100) : null;
-  var growthColor = growth === null ? '#94a3b8' : (growth >= 0 ? '#34d399' : '#f87171');
-  var growthSign = growth === null ? '' : (growth >= 0 ? '+' : '');
-
-  var html = '';
-
-  // 요약 카드
-  html += '<div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:12px;">';
-  html += '<div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">"' + escapeHtml(q) + '" 검색 결과</div>';
-  html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">';
-  html += '<span style="font-size:13px;color:#fff;">매장 <strong style="font-size:18px;font-family:DM Mono,monospace;">' + totalCount + '</strong>개</span>';
-  if (totalS25 > 0) {
-    html += '<span style="font-size:13px;color:#fff;">25년 매출 <strong style="font-size:16px;font-family:DM Mono,monospace;color:' + (BRAND_COLORS['일룸']) + ';">' + formatSales(totalS25) + '</strong></span>';
-  }
-  html += '</div>';
-  if (growth !== null) {
-    html += '<div style="font-size:12px;color:#94a3b8;">24년 ' + formatSales(totalS24) + ' → 25년 ' + formatSales(totalS25) + ' <strong style="color:' + growthColor + ';">' + growthSign + growth.toFixed(1) + '%</strong></div>';
-  }
-  html += '</div>';
-
-  // 브랜드별 분포
-  html += '<div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:8px;">브랜드별 분포</div>';
-  html += '<div style="background:var(--surface2);border-radius:8px;padding:8px 12px;margin-bottom:14px;">';
-  brands.forEach(function(b) {
-    if (!byBrand[b]) return;
-    var d = byBrand[b];
-    var bc = BRAND_COLORS[b] || '#888';
-    html += '<div style="display:grid;grid-template-columns:60px 36px 1fr;gap:8px;padding:5px 0;align-items:center;font-size:12px;">';
-    html += '<span style="color:' + bc + ';font-weight:700;">' + b + '</span>';
-    html += '<span style="text-align:right;color:#fff;font-family:DM Mono,monospace;">' + d.count + '개</span>';
-    html += '<span style="text-align:right;color:#fff;font-family:DM Mono,monospace;">' + (d.s25 > 0 ? formatSales(d.s25) : '-') + '</span>';
-    html += '</div>';
-  });
-  html += '</div>';
-
-  // 상권 분포 (있다면)
-  var areaList = Object.keys(areas).sort(function(a, b) { return areas[b] - areas[a]; });
-  if (areaList.length > 0) {
-    html += '<div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:8px;">상권 분포</div>';
-    html += '<div style="background:var(--surface2);border-radius:8px;padding:8px 12px;margin-bottom:14px;">';
-    areaList.slice(0, 5).forEach(function(a) {
-      html += '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#cbd5e1;"><span>' + escapeHtml(a) + '</span><span style="font-family:DM Mono,monospace;">' + areas[a] + '개</span></div>';
-    });
-    html += '</div>';
-  }
-
-  // 매장 리스트 (매출 내림차순, 상위 30개)
-  matched.sort(function(a, b) {
-    var sa = a.sales ? (a.sales.s25 || 0) : 0;
-    var sb = b.sales ? (b.sales.s25 || 0) : 0;
-    return sb - sa;
-  });
-  html += '<div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:8px;">매장 리스트 (' + Math.min(matched.length, 30) + '/' + matched.length + ')</div>';
-  matched.slice(0, 30).forEach(function(m) {
-    var s = m.store, bc = BRAND_COLORS[s.brand] || '#888';
-    var s25Str = m.sales && m.sales.s25 > 0 ? formatSales(m.sales.s25) : '-';
-    html += '<div onclick="focusStore(' + s.id + ');closeHelperOnMobile();" style="padding:8px 10px;border-radius:6px;cursor:pointer;border-left:3px solid ' + bc + ';background:var(--surface2);margin-bottom:6px;" onmouseover="this.style.background=\'#1f2937\'" onmouseout="this.style.background=\'var(--surface2)\'">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">';
-    html += '<span style="font-size:12px;font-weight:600;color:#fff;"><span style="color:' + bc + ';">' + s.brand + '</span> ' + escapeHtml(displayName(s)) + '</span>';
-    html += '<span style="font-size:12px;color:#fff;font-family:DM Mono,monospace;font-weight:600;">' + s25Str + '</span>';
-    html += '</div>';
-    html += '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">' + escapeHtml((s.region || '') + (m.area ? ' · ' + m.area : '')) + '</div>';
-    html += '</div>';
-  });
-
-  results.innerHTML = html;
-}
-
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, function(c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; });
-}
-
-function closeHelperOnMobile() {
-  if (window.innerWidth < 800) document.getElementById('helperPanel').style.display = 'none';
-}
 </script>
 </body>
 </html>
