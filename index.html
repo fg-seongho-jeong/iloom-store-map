@@ -1583,9 +1583,118 @@ function showRegionDashboard(region) {
   });
   html += '</div>';
   html += '<div id="brandDetailArea"></div>';
+  html += renderMarketAnalysis(region);
 
   document.getElementById('regionDashboardContent').innerHTML = html;
   document.getElementById('regionDashboard').classList.add('visible');
+}
+
+// 상권 단위 분석 (sales_data.area = market_group 기준)
+function renderMarketAnalysis(region) {
+  var isAll = (region === '전체');
+  var brands = ['일룸', '한샘', '리바트', '까사미아', '에몬스'];
+
+  // 상권별 집계: { area: { region, count, s25, s24, byBrand: { 일룸: count, ... }, stores: [] } }
+  var marketData = {};
+  allStores.forEach(function(s) {
+    if (!s.region) return;
+    if (!isAll && s.region !== region) return;
+    var sales = findSalesData(s.brand, s.name, s.region);
+    if (!sales || !sales.area) return;
+    var key = s.region + '|' + sales.area;
+    if (!marketData[key]) {
+      marketData[key] = { region: s.region, area: sales.area, count: 0, s24: 0, s25: 0, byBrand: {}, stores: [] };
+    }
+    var m = marketData[key];
+    m.count++;
+    if (sales.s24 > 0) m.s24 += sales.s24;
+    if (sales.s25 > 0) m.s25 += sales.s25;
+    m.byBrand[s.brand] = (m.byBrand[s.brand] || 0) + 1;
+    m.stores.push({ id: s.id, brand: s.brand, name: s.name, sales: sales });
+  });
+
+  var marketsList = Object.values(marketData);
+  if (marketsList.length === 0) return '';
+
+  // 매출 내림차순
+  marketsList.sort(function(a, b) { return b.s25 - a.s25; });
+
+  // 전체일 때는 Top 20만
+  var displayList = isAll ? marketsList.slice(0, 20) : marketsList;
+
+  var totalS25 = marketsList.reduce(function(a, b) { return a + b.s25; }, 0);
+  var totalCount = marketsList.reduce(function(a, b) { return a + b.count; }, 0);
+
+  var titleText = isAll ? '전국 상권 Top 20' : region + ' 상권별 분석';
+  var html = '<div style="margin-top:16px;padding:18px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">';
+  html += '<div style="font-size:15px;font-weight:700;color:#fff;">🏙️ ' + titleText + '</div>';
+  html += '<div style="font-size:11px;color:#94a3b8;">상권 ' + marketsList.length + '개 · 매장 ' + totalCount + '개</div>';
+  html += '</div>';
+
+  // 표 헤더
+  html += '<div style="background:var(--surface);border-radius:8px;overflow:hidden;border:1px solid var(--border);">';
+  html += '<div style="display:grid;grid-template-columns:' + (isAll ? '32px 1.6fr' : '32px 2fr') + ' 0.8fr 1fr 1fr 1.5fr;padding:10px 14px;background:var(--surface2);font-size:11px;color:#94a3b8;font-weight:600;border-bottom:1px solid var(--border);">';
+  html += '<span>#</span>';
+  html += '<span>' + (isAll ? '시도 / 상권' : '상권') + '</span>';
+  html += '<span style="text-align:right;">매장</span>';
+  html += '<span style="text-align:right;">25년 매출</span>';
+  html += '<span style="text-align:right;">매장당</span>';
+  html += '<span>브랜드 분포</span>';
+  html += '</div>';
+
+  // 행
+  displayList.forEach(function(m, idx) {
+    var pct = totalS25 > 0 ? (m.s25 / totalS25 * 100) : 0;
+    var perStore = m.count > 0 ? Math.round(m.s25 / m.count) : 0;
+    var areaLabel = isAll ? (m.region + ' / ' + m.area) : m.area;
+    var brandBadges = '';
+    Object.keys(m.byBrand).sort(function(a, b) { return brands.indexOf(a) - brands.indexOf(b); }).forEach(function(b) {
+      var bc = BRAND_COLORS[b] || '#888';
+      brandBadges += '<span style="display:inline-block;background:' + bc + ';color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:8px;margin-right:2px;">' + b + ' ' + m.byBrand[b] + '</span>';
+    });
+    html += '<div onclick="focusMarket(\'' + m.region + '\',' + JSON.stringify(m.area).replace(/"/g, '&quot;') + ')" style="display:grid;grid-template-columns:' + (isAll ? '32px 1.6fr' : '32px 2fr') + ' 0.8fr 1fr 1fr 1.5fr;padding:10px 14px;border-top:1px solid var(--border);align-items:center;cursor:pointer;font-size:12px;" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'transparent\'">';
+    html += '<span style="color:' + (idx < 3 ? '#fbbf24' : '#94a3b8') + ';font-weight:700;">' + (idx + 1) + '</span>';
+    html += '<span style="color:#fff;font-weight:600;">' + areaLabel + '</span>';
+    html += '<span style="text-align:right;color:#fff;font-family:DM Mono,monospace;">' + m.count + '</span>';
+    html += '<span style="text-align:right;color:#fff;font-family:DM Mono,monospace;font-weight:600;">' + (m.s25 > 0 ? formatSales(m.s25) : '-') + '</span>';
+    html += '<span style="text-align:right;color:#cbd5e1;font-family:DM Mono,monospace;">' + (perStore > 0 ? formatSales(perStore) : '-') + '</span>';
+    html += '<span>' + brandBadges + '</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+  if (isAll && marketsList.length > 20) {
+    html += '<div style="font-size:11px;color:#6b7280;margin-top:8px;text-align:right;">전국 ' + marketsList.length + '개 상권 중 매출 상위 20개 표시</div>';
+  }
+  html += '</div>';
+
+  return html;
+}
+
+// 상권 클릭 → 해당 상권 매장만 강조 (지도 fit)
+function focusMarket(regionName, areaName) {
+  // 해당 상권 매장 찾기
+  var targetStores = allStores.filter(function(s) {
+    if (s.region !== regionName) return false;
+    var sales = findSalesData(s.brand, s.name, s.region);
+    return sales && sales.area === areaName;
+  });
+  if (targetStores.length === 0) return;
+  // 지도 bbox로 이동
+  var minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+  targetStores.forEach(function(s) {
+    minLat = Math.min(minLat, s.lat); maxLat = Math.max(maxLat, s.lat);
+    minLng = Math.min(minLng, s.lng); maxLng = Math.max(maxLng, s.lng);
+  });
+  var pad = 0.01;
+  if (mapEngine === 'kakao' && mapObj) {
+    var bounds = new kakao.maps.LatLngBounds();
+    bounds.extend(new kakao.maps.LatLng(minLat - pad, minLng - pad));
+    bounds.extend(new kakao.maps.LatLng(maxLat + pad, maxLng + pad));
+    mapObj.setBounds(bounds);
+  } else if (mapEngine === 'leaflet' && mapObj) {
+    mapObj.fitBounds([[minLat - pad, minLng - pad], [maxLat + pad, maxLng + pad]], { padding: [40, 40] });
+  }
 }
 
 function toggleBrandDetail(brand, region) {
