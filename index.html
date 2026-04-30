@@ -1663,9 +1663,12 @@ function renderMarketAnalysis(region) {
     html += '</div>';
   });
   html += '</div>';
+  html += '<div style="font-size:10px;color:#6b7280;margin-top:8px;line-height:1.5;">';
+  html += '<strong style="color:#94a3b8;">출처:</strong> 매출비교대시보드 (Google Sheets) · <strong style="color:#94a3b8;">기준:</strong> 회사 사내 영업 권역 (인접 구/시 묶음, 행정구역과 다를 수 있음)';
   if (isAll && marketsList.length > 20) {
-    html += '<div style="font-size:11px;color:#6b7280;margin-top:8px;text-align:right;">전국 ' + marketsList.length + '개 상권 중 매출 상위 20개 표시</div>';
+    html += '<br>전국 ' + marketsList.length + '개 상권 중 매출 상위 20개 표시';
   }
+  html += '</div>';
   html += '</div>';
 
   return html;
