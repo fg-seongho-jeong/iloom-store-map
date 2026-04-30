@@ -1636,7 +1636,7 @@ function renderMarketAnalysis(region) {
   html += '<div style="background:var(--surface);border-radius:8px;overflow:hidden;border:1px solid var(--border);">';
   html += '<div style="display:grid;grid-template-columns:' + (isAll ? '32px 1.6fr' : '32px 2fr') + ' 0.8fr 1fr 1fr 1.5fr;padding:10px 14px;background:var(--surface2);font-size:11px;color:#94a3b8;font-weight:600;border-bottom:1px solid var(--border);">';
   html += '<span>#</span>';
-  html += '<span>' + (isAll ? '시도 / 상권' : '상권') + '</span>';
+  html += '<span>' + (isAll ? '시도: 상권' : '상권') + '</span>';
   html += '<span style="text-align:right;">매장</span>';
   html += '<span style="text-align:right;">25년 매출</span>';
   html += '<span style="text-align:right;">매장당</span>';
@@ -1647,7 +1647,7 @@ function renderMarketAnalysis(region) {
   displayList.forEach(function(m, idx) {
     var pct = totalS25 > 0 ? (m.s25 / totalS25 * 100) : 0;
     var perStore = m.count > 0 ? Math.round(m.s25 / m.count) : 0;
-    var areaLabel = isAll ? (m.region + ' / ' + m.area) : m.area;
+    var areaLabel = isAll ? (m.region + ': ' + m.area) : m.area;
     var brandBadges = '';
     Object.keys(m.byBrand).sort(function(a, b) { return brands.indexOf(a) - brands.indexOf(b); }).forEach(function(b) {
       var bc = BRAND_COLORS[b] || '#888';
