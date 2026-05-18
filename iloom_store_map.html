@@ -1,0 +1,2593 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>일룸 유통망 + 경쟁사 지도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Leaflet (폴백용) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- 카카오 SDK: 반드시 실행 코드보다 먼저 선언 -->
+<script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=625310b264d6d44999e623855ae46f03&libraries=services&autoload=false"></script>
+<script src="competitors_data.js"></script>
+<script src="sales_data.js"></script>
+<script src="population_data.js"></script>
+<script src="district_boundaries.js"></script>
+<script src="brand_history.js"></script>
+<script src="marker_to_sales.js"></script>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #161920;
+    --surface2: #1e222d;
+    --border: #2a2f3d;
+    --accent: #e8463a;
+    --accent2: #ff6b35;
+    --text: #e8eaf0;
+    --text-muted: #7a8099;
+    --text-dim: #4a5068;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Noto Sans KR', sans-serif; background: var(--bg);
+    color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; height: 56px; background: var(--surface);
+    border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .logo-mark {
+    width: 32px; height: 32px; background: var(--accent); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; letter-spacing: -0.5px; color: #fff;
+  }
+  .header-title { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+  .header-sub { font-size: 11px; color: var(--text-muted); font-weight: 300; }
+  .header-tabs { display: flex; gap: 4px; margin-left: 24px; }
+  .header-tab {
+    padding: 6px 16px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border); background: transparent;
+    color: var(--text-muted); font-family: 'Noto Sans KR', sans-serif; transition: all 0.15s;
+  }
+  .header-tab:hover { background: var(--surface2); color: var(--text); }
+  .header-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .header-stats { display: flex; gap: 24px; }
+  .stat-item { text-align: right; }
+  .stat-value { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; color: var(--accent); line-height: 1; }
+  .stat-label { font-size: 10px; color: var(--text-dim); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .map-engine-badge {
+    font-size: 9px; padding: 2px 6px; border-radius: 4px; background: var(--surface2);
+    color: var(--text-dim); border: 1px solid var(--border); margin-left: 8px;
+  }
+  .main { display: flex; flex: 1; overflow: hidden; }
+  .sidebar {
+    width: 360px; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+  }
+  .sidebar-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); }
+  .search-box {
+    display: flex; align-items: center; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; gap: 8px;
+  }
+  .search-box:focus-within { border-color: var(--accent); }
+  .search-box svg { color: var(--text-dim); flex-shrink: 0; }
+  .search-box input {
+    background: none; border: none; outline: none; color: var(--text);
+    font-family: 'Noto Sans KR', sans-serif; font-size: 13px; width: 100%; height: 36px;
+  }
+  .search-box input::placeholder { color: var(--text-dim); }
+  .region-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .region-btn {
+    padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border); background: transparent;
+    color: var(--text-muted); font-family: 'Noto Sans KR', sans-serif; transition: all 0.15s;
+  }
+  .region-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .region-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .store-count { font-size: 11px; color: var(--text-dim); margin-top: 8px; }
+  .store-count span { color: var(--accent); font-family: 'DM Mono', monospace; font-weight: 500; }
+  .store-list { overflow-y: auto; flex: 1; padding: 8px 0; }
+  .store-list::-webkit-scrollbar { width: 4px; }
+  .store-list::-webkit-scrollbar-track { background: transparent; }
+  .store-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .store-item {
+    padding: 12px 20px; cursor: pointer; border-left: 3px solid transparent;
+    transition: all 0.15s; display: flex; align-items: flex-start; gap: 10px;
+  }
+  .store-item:hover { background: var(--surface2); border-left-color: var(--accent2); }
+  .store-item.active { background: var(--surface2); border-left-color: var(--accent); }
+  .store-num { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-dim); min-width: 26px; padding-top: 2px; }
+  .store-info { flex: 1; min-width: 0; }
+  .store-name { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .stype-tag {
+    font-size: 11px; padding: 1px 6px; border-radius: 3px; font-weight: 600; flex-shrink: 0;
+  }
+  .stype-tag.direct { background: rgba(52,211,153,0.15); color: #34d399; }
+  .stype-tag.dealer { background: rgba(251,191,36,0.15); color: #fbbf24; }
+  .store-addr { font-size: 13px; color: #cbd5e1; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .store-region-tag {
+    font-size: 11px; padding: 2px 7px; border-radius: 4px; background: var(--surface2);
+    color: var(--text-muted); border: 1px solid var(--border); flex-shrink: 0; margin-top: 2px;
+  }
+  .map-container { flex: 1; position: relative; overflow: hidden; }
+  #map { width: 100%; height: 100%; background: #1a1a2e; }
+  .info-panel {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 420px;
+    background: var(--surface); border-left: 1px solid var(--border);
+    padding: 24px; box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+    transform: translateX(100%); opacity: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none; z-index: 1000; overflow-y: auto;
+  }
+  .info-panel.visible { transform: translateX(0); opacity: 1; pointer-events: all; }
+  .info-panel::-webkit-scrollbar { width: 4px; }
+  .info-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .info-panel-close {
+    position: absolute; top: 16px; left: 16px; width: 30px; height: 30px;
+    border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); font-size: 16px; z-index: 10;
+  }
+  .info-panel-close:hover { background: var(--border); }
+  .panel-close-below { top: 54px; left: auto; right: 16px; }
+  .info-panel-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--accent); margin-bottom: 8px;
+  }
+  .info-panel-tag::before {
+    content: ''; display: block; width: 6px; height: 6px; background: var(--accent); border-radius: 50%;
+  }
+  .info-panel-name { font-size: 18px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.5px; }
+  .info-panel-addr {
+    font-size: 12px; color: var(--text-muted); line-height: 1.5;
+    padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px;
+  }
+  .info-placeholder {
+    background: var(--surface2); border: 1px dashed var(--border); border-radius: 8px;
+    padding: 12px; font-size: 11px; color: var(--text-dim); text-align: center; line-height: 1.6;
+  }
+  .info-placeholder strong { display: block; color: var(--text-muted); margin-bottom: 2px; font-size: 12px; }
+  .no-results { padding: 32px 20px; text-align: center; color: var(--text-dim); font-size: 13px; }
+  .brand-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .brand-btn {
+    padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    cursor: pointer; border: 1px solid var(--border); background: transparent;
+    color: var(--text-muted); font-family: 'Noto Sans KR', sans-serif; transition: all 0.15s;
+  }
+  .brand-btn:hover { opacity: 0.85; }
+  .brand-btn.active { color: #fff; }
+  .brand-btn[data-brand="일룸"].active { background: #e8463a; border-color: #e8463a; }
+  .brand-btn[data-brand="한샘"].active { background: #3b82f6; border-color: #3b82f6; }
+  .brand-btn[data-brand="리바트"].active { background: #10b981; border-color: #10b981; }
+  .brand-btn[data-brand="까사미아"].active { background: #a855f7; border-color: #a855f7; }
+  .brand-btn[data-brand="에몬스"].active { background: #f59e0b; border-color: #f59e0b; }
+  .store-brand-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; margin-top: 4px;
+  }
+  .panel-section { margin-top: 14px; }
+  .panel-section-title {
+    font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+  }
+  .panel-section-title::before { content: ''; display: block; width: 3px; height: 12px; background: var(--accent); border-radius: 2px; }
+  .sales-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px;
+  }
+  .sales-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .sales-row:last-child { margin-bottom: 0; }
+  .sales-label { font-size: 11px; color: var(--text-dim); }
+  .sales-value { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; color: var(--text); }
+  .sales-change { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+  .sales-change.up { color: #34d399; background: rgba(52,211,153,0.1); }
+  .sales-change.down { color: #f87171; background: rgba(248,113,113,0.1); }
+  .rank-badge { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 600; }
+  .competitor-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px;
+  }
+  .competitor-row .brand-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .competitor-row .comp-info { flex: 1; min-width: 0; }
+  .competitor-row .comp-name { font-size: 12px; font-weight: 500; color: var(--text); }
+  .competitor-row .comp-dist { font-size: 10px; color: var(--text-dim); }
+  .competitor-row .comp-sales { text-align: right; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-muted); }
+  .bar-chart { margin-top: 6px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .bar-label { font-size: 10px; color: var(--text-muted); width: 50px; text-align: right; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 16px; background: var(--bg); border-radius: 4px; overflow: hidden; position: relative; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; display: flex; align-items: center; padding-left: 6px; }
+  .bar-value { font-size: 9px; font-family: 'DM Mono', monospace; color: #fff; white-space: nowrap; }
+  /* 비교 모드 */
+  .compare-bar {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 16px; display: flex; align-items: center; gap: 12px;
+    z-index: 1001; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    transition: all 0.2s; opacity: 0; pointer-events: none;
+  }
+  .compare-bar.visible { opacity: 1; pointer-events: all; }
+  .compare-bar .compare-text { font-size: 12px; color: var(--text-muted); }
+  .compare-bar .compare-text span { color: var(--accent); font-weight: 600; }
+  .compare-bar button {
+    padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 600;
+    cursor: pointer; font-family: 'Noto Sans KR', sans-serif; border: none; transition: all 0.15s;
+  }
+  .btn-compare { background: var(--accent); color: #fff; }
+  .btn-compare:hover { opacity: 0.85; }
+  .btn-compare:disabled { background: var(--surface2); color: var(--text-dim); cursor: not-allowed; }
+  .btn-cancel { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border) !important; }
+  .btn-cancel:hover { background: var(--border); }
+  .store-item .compare-check {
+    width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border);
+    background: var(--surface2); cursor: pointer; flex-shrink: 0; margin-top: 2px;
+    display: flex; align-items: center; justify-content: center; font-size: 10px; color: transparent;
+  }
+  .store-item .compare-check.checked { background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* 비교 패널 */
+  .compare-panel {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 420px; transform: translateX(100%);
+    background: var(--surface); border-left: 1px solid var(--border);
+    padding: 24px; box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+    z-index: 1001; opacity: 0; pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow-y: auto;
+  }
+  .compare-panel.visible { transform: translateX(0); opacity: 1; pointer-events: all; }
+  .compare-panel::-webkit-scrollbar { height: 4px; }
+  .compare-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .compare-table th { font-size: 10px; color: var(--text-dim); font-weight: 500; text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .compare-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  .compare-table .brand-col { font-weight: 600; white-space: nowrap; }
+  .compare-table .num-col { font-family: 'DM Mono', monospace; text-align: right; }
+  /* 내보내기 + 비교 토글 버튼 */
+  .map-toolbar {
+    position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; z-index: 1001;
+  }
+  .toolbar-btn {
+    padding: 7px 12px; border-radius: 8px; font-size: 11px; font-weight: 500;
+    cursor: pointer; font-family: 'Noto Sans KR', sans-serif; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted); transition: all 0.15s;
+    display: flex; align-items: center; gap: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .toolbar-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+  .toolbar-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .toolbar-btn svg { width: 14px; height: 14px; }
+  /* 반경 슬라이더 */
+  .radius-slider-wrap { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 0; }
+  .radius-slider-wrap label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .radius-slider-wrap input[type=range] {
+    flex: 1; -webkit-appearance: none; height: 4px; background: var(--border); border-radius: 2px; outline: none;
+  }
+  .radius-slider-wrap input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: 2px solid var(--surface);
+  }
+  .radius-val { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent); min-width: 36px; text-align: right; }
+  /* 히트맵 범례 */
+  .heatmap-legend {
+    position: absolute; bottom: 24px; left: 24px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; z-index: 50; display: none; font-size: 11px;
+  }
+  .heatmap-legend.visible { display: block; }
+  .legend-title { font-weight: 600; margin-bottom: 6px; color: var(--text); }
+  .legend-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+  .legend-circle { border-radius: 50%; flex-shrink: 0; }
+  /* 지역 대시보드 - 좌측 세로 패널 (flex 항목, 지도 옆) */
+  .region-dashboard {
+    width: 880px; flex-shrink: 0;
+    background: var(--surface); border-right: 1px solid var(--border);
+    padding: 22px 26px 22px 26px; display: none;
+    overflow-y: auto;
+    position: relative;
+  }
+  .region-dashboard.visible { display: block; }
+  .region-dashboard::-webkit-scrollbar { width: 6px; }
+  .region-dashboard::-webkit-scrollbar-track { background: transparent; }
+  .region-dashboard::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .region-dashboard-close {
+    position: absolute; top: 16px; right: 16px; width: 28px; height: 28px;
+    border-radius: 50%; background: var(--surface2); border: 1px solid var(--border);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); font-size: 14px;
+  }
+  .region-dashboard-close:hover { background: var(--border); }
+  .rd-header { font-size: 20px; font-weight: 700; margin-bottom: 6px; padding-right: 36px; }
+  .rd-pop-line { font-size: 14px; color: #cbd5e1; margin-bottom: 18px; padding-right: 36px; }
+  .rd-pop-line strong { color: #fff; font-family: 'DM Mono', monospace; font-size: 16px; }
+  .rd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rd-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; text-align: left;
+  }
+  .rd-brand { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .rd-count { font-size: 30px; font-weight: 700; font-family: 'DM Mono', monospace; }
+  .rd-sales { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+  .rd-bar-wrap { margin-top: 8px; height: 5px; background: var(--border); border-radius: 3px; }
+  .rd-bar { height: 100%; border-radius: 3px; }
+  /* 공백 분석 */
+  .gap-sub-tab {
+    flex: 1; padding: 7px 0; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border); background: transparent;
+    color: var(--text-muted); font-family: 'Noto Sans KR', sans-serif; transition: all 0.15s;
+  }
+  .gap-sub-tab:hover { background: var(--surface2); color: var(--text); }
+  .gap-sub-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .gap-brand-btn, .gap-brand-btn-metro, .gap-radius-btn, .gap-radius-btn-metro {
+    padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+  }
+  .gap-brand-btn.active, .gap-brand-btn-metro.active, .gap-radius-btn.active, .gap-radius-btn-metro.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .gap-zone {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;
+  }
+  .gap-zone:hover { border-color: var(--accent); }
+  .gap-zone-brands { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+  .gap-zone-brand { padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; color: #fff; }
+  /* 카카오 순수 DOM 툴팁 */
+  #kakao-float-tooltip {
+    position: absolute; z-index: 9999; pointer-events: none; display: none;
+    padding: 6px 12px; font-size: 13px; font-weight: 600; white-space: nowrap;
+    background: #1e222d; color: #e8eaf0; border: 1px solid #2a2f3d;
+    border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    font-family: 'Noto Sans KR', sans-serif; transform: translate(-50%, -100%);
+    margin-top: -42px;
+  }
+  .selected-label {
+    padding: 4px 10px; font-size: 12px; font-weight: 700; white-space: nowrap;
+    background: #1e222d; color: #e8eaf0; border: 2px solid; border-radius: 5px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5); font-family: 'Noto Sans KR', sans-serif;
+    text-align: center; position: relative;
+  }
+  .selected-label::after {
+    content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 6px solid #1e222d;
+  }
+  /* Leaflet 다크모드 */
+  .leaflet-control-zoom a { background: var(--surface) !important; color: var(--text) !important; border-color: var(--border) !important; }
+  .leaflet-control-zoom a:hover { background: var(--surface2) !important; }
+  .leaflet-control-attribution { display: none; }
+  .custom-tooltip {
+    background: #1e222d !important; color: #e8eaf0 !important; border: 1px solid #2a2f3d !important;
+    border-radius: 6px !important; padding: 6px 10px !important; font-size: 12px !important;
+    font-family: 'Noto Sans KR', sans-serif !important; box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
+  }
+  .custom-tooltip::before { border-top-color: #2a2f3d !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo-mark">IL</div>
+    <div>
+      <div class="header-title">일룸 유통망 + 경쟁사 <span class="map-engine-badge" id="engineBadge">loading...</span></div>
+      <div class="header-sub">오프라인 매장 현황</div>
+    </div>
+  </div>
+  <div class="header-tabs">
+    <button class="header-tab active" onclick="switchView('map')">유통망 지도</button>
+    <button class="header-tab" onclick="switchView('gap')">공백 분석</button>
+  </div>
+  <div class="header-stats">
+    <div class="stat-item">
+      <div class="stat-value" id="totalCount">-</div>
+      <div class="stat-label">전체 매장</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value" id="filteredCount">-</div>
+      <div class="stat-label">표시 중</div>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="search-box">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" id="searchInput" placeholder="매장명 또는 주소 검색...">
+      </div>
+      <div class="brand-filters" id="brandFilters"></div>
+      <div class="region-filters" id="regionFilters"></div>
+      <div class="store-count">총 <span id="sidebarCount">0</span>개 매장</div>
+    </div>
+    <div class="store-list" id="storeList"></div>
+  </div>
+
+  <!-- 공백 분석 사이드바 -->
+  <div class="sidebar" id="gapSidebar" style="display:none;">
+    <div class="sidebar-header">
+      <div style="font-size:15px;font-weight:700;margin-bottom:10px;">커버리지 공백 분석</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">일룸 커버리지 밖 경쟁사 매장</div>
+      <div style="display:flex;gap:4px;margin-bottom:14px;">
+        <button class="gap-sub-tab active" onclick="switchGapMode('national')">전국</button>
+        <button class="gap-sub-tab" onclick="switchGapMode('metro')">수도권</button>
+      </div>
+      <div id="gapFilterNational">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:11px;color:var(--text-muted);">커버리지 반경</span>
+          <button class="gap-radius-btn" onclick="setCoverageRadius(10)">10km</button>
+          <button class="gap-radius-btn active" onclick="setCoverageRadius(15)">15km</button>
+          <button class="gap-radius-btn" onclick="setCoverageRadius(20)">20km</button>
+        </div>
+      </div>
+      <div id="gapFilterMetro" style="display:none;">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:11px;color:var(--text-muted);">커버리지 반경</span>
+          <button class="gap-radius-btn-metro active" onclick="setCoverageRadius(1)">1km</button>
+          <button class="gap-radius-btn-metro" onclick="setCoverageRadius(2)">2km</button>
+          <button class="gap-radius-btn-metro" onclick="setCoverageRadius(3)">3km</button>
+          <button class="gap-radius-btn-metro" onclick="setCoverageRadius(5)">5km</button>
+        </div>
+      </div>
+      <div id="gapSummary" style="margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;"></div>
+      <div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:10px;color:#94a3b8;line-height:1.5;">
+        <strong style="color:#fbbf24;">출점 우선순위 점수</strong> = 커버리지 밖 경쟁사 수 × √(지역 인구/만명)<br>
+        경쟁사가 많고 인구가 많은 지역일수록 높은 점수
+      </div>
+    </div>
+    <div class="store-list" id="gapResults" style="font-size:12px;"></div>
+  </div>
+
+  <!-- 지역 대시보드 (map-container 옆) -->
+  <div class="region-dashboard" id="regionDashboard">
+    <button class="region-dashboard-close" onclick="closeRegionDashboard()">&#10005;</button>
+    <div id="regionDashboardContent"></div>
+  </div>
+
+  <div class="map-container" style="position:relative;">
+    <div id="map"></div>
+    <div id="kakao-float-tooltip"></div>
+    <!-- 툴바: 비교모드 + 내보내기 -->
+    <div class="map-toolbar">
+      <button class="toolbar-btn" id="btnCompareMode" onclick="toggleCompareMode()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        비교
+      </button>
+      <button class="toolbar-btn" id="btnHeatmap" onclick="toggleHeatmap()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18M7 14l4-4 4 4 6-6"/></svg>
+        성장률
+      </button>
+      <button class="toolbar-btn" id="btnSales" onclick="toggleSalesDashboard()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        지역 현황
+      </button>
+      <button class="toolbar-btn" id="btnShipment" onclick="toggleShipment()">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"/><path d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10m10 0H3m10 0h2m0 0a1 1 0 011-1V8h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V15a1 1 0 01-1 1h-1"/></svg>
+        출고지
+      </button>
+    </div>
+    <!-- 비교 모드 바 -->
+    <div class="compare-bar" id="compareBar">
+      <div class="compare-text">매장 <span id="compareCount">0</span>/6 선택</div>
+      <button class="btn-compare" id="btnRunCompare" onclick="runCompare()" disabled>비교하기</button>
+      <button class="btn-cancel" onclick="toggleCompareMode()">취소</button>
+    </div>
+    <!-- 비교 결과 패널 -->
+    <div class="compare-panel" id="comparePanel">
+      <button class="info-panel-close" onclick="closeCompare()">&#10005;</button>
+      <div id="compareContent"></div>
+    </div>
+    <!-- 성장률 범례 -->
+    <div class="heatmap-legend" id="heatmapLegend">
+      <div class="legend-title">지역별 매출 성장률</div>
+      <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">
+        <button class="period-btn active" data-period="yoy_full" onclick="setGrowthPeriod('yoy_full')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4b5563;background:#3b82f6;color:#fff;cursor:pointer;font-family:inherit;">연간 (25/24)</button>
+        <button class="period-btn" data-period="rolling12m" onclick="setGrowthPeriod('rolling12m')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4b5563;background:transparent;color:#cbd5e1;cursor:pointer;font-family:inherit;">최근12개월</button>
+        <button class="period-btn" data-period="recent3m" onclick="setGrowthPeriod('recent3m')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4b5563;background:transparent;color:#cbd5e1;cursor:pointer;font-family:inherit;">최근3개월</button>
+        <button class="period-btn" data-period="recent1m" onclick="setGrowthPeriod('recent1m')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4b5563;background:transparent;color:#cbd5e1;cursor:pointer;font-family:inherit;">최근1개월</button>
+      </div>
+      <div id="periodLabel" style="font-size:10px;color:#94a3b8;margin-bottom:6px;">25년 전체 vs 24년 전체</div>
+      <div class="legend-row"><div class="legend-circle" style="width:14px;height:14px;background:#6ee7b7;border-radius:3px;"></div> +10% 이상</div>
+      <div class="legend-row"><div class="legend-circle" style="width:14px;height:14px;background:#a7f3d0;border-radius:3px;"></div> +5% ~ +10%</div>
+      <div class="legend-row"><div class="legend-circle" style="width:14px;height:14px;background:#bfdbfe;border-radius:3px;"></div> 0 ~ +5%</div>
+      <div class="legend-row"><div class="legend-circle" style="width:14px;height:14px;background:#fde68a;border-radius:3px;"></div> -5% ~ 0%</div>
+      <div class="legend-row"><div class="legend-circle" style="width:14px;height:14px;background:#fed7aa;border-radius:3px;"></div> -10% ~ -5%</div>
+      <div class="legend-row"><div class="legend-circle" style="width:14px;height:14px;background:#fca5a5;border-radius:3px;"></div> -10% 미만</div>
+      <div class="legend-row"><div class="legend-circle" style="width:14px;height:14px;background:#4b5563;border-radius:3px;"></div> 데이터 없음</div>
+    </div>
+    <div class="info-panel" id="infoPanel">
+      <button class="info-panel-close panel-close-below" onclick="closePanel()">&#10005;</button>
+      <div class="info-panel-tag" id="panelTag">일룸 대리점</div>
+      <div class="info-panel-name" id="panelName">-</div>
+      <div class="info-panel-addr" id="panelAddr">-</div>
+      <div class="radius-slider-wrap">
+        <label>반경</label>
+        <input type="range" id="radiusSlider" min="1" max="20" value="5" step="1" oninput="updateRadius(this.value)">
+        <span class="radius-val" id="radiusVal">5km</span>
+      </div>
+      <div id="panelSalesSection"></div>
+      <div id="panelCompetitorSection"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+// 브랜드 색상 설정
+// ══════════════════════════════════════════
+var BRAND_COLORS = {
+  '일룸': '#e8463a',
+  '한샘': '#3b82f6',
+  '리바트': '#10b981',
+  '까사미아': '#a855f7',
+  '에몬스': '#f59e0b'
+};
+
+// ══════════════════════════════════════════
+// 일룸 매장 데이터
+// ══════════════════════════════════════════
+var STORES_RAW = [
+  { name: "논현4", addr: "서울특별시 강남구 학동로 147", lat: 37.5130387690016, lng: 127.026924422516 },
+  { name: "마포2", addr: "서울특별시 서대문구 연희로 148", lat: 37.5702758725259, lng: 126.934460205946 },
+  { name: "대전둔산5", addr: "대전광역시 서구 대덕대로 168번길 32", lat: 36.3467300868055, lng: 127.377459134304 },
+  { name: "송파4", addr: "서울특별시 송파구 송파대로 167", lat: 37.4846614982049, lng: 127.120933640924 },
+  { name: "용산2", addr: "서울특별시 용산구 한강대로 23길 55", lat: 37.5297718014452, lng: 126.964741503485 },
+  { name: "수원광교3", addr: "경기도 용인시 기흥구 흥덕1로 5-13", lat: 37.2693991112162, lng: 127.065082946408 },
+  { name: "대구3", addr: "대구광역시 북구 유통단지로 126", lat: 35.909503885045, lng: 128.615582688087 },
+  { name: "노원", addr: "서울특별시 노원구 한글비석로 212", lat: 37.6466191682977, lng: 127.076833609928 },
+  { name: "강동아이파크", addr: "서울특별시 강동구 고덕비즈밸리로 51", lat: 37.5666602103625, lng: 127.157332910007 },
+  { name: "분당서현", addr: "경기도 성남시 분당구 새마을로51번길 1", lat: 37.3836968211799, lng: 127.135806570253 },
+  { name: "부산센텀4", addr: "부산광역시 해운대구 센텀동로 26", lat: 35.1720424005824, lng: 129.132621594428 },
+  { name: "경주4", addr: "경상북도 경주시 원화로 468", lat: 35.8618921929533, lng: 129.221755996237 },
+  { name: "구미5", addr: "경상북도 구미시 산업로28길 4", lat: 36.1258767253019, lng: 128.345861309164 },
+  { name: "달서5", addr: "대구광역시 달서구 조암로 200", lat: 35.8162091801963, lng: 128.512006189285 },
+  { name: "수성5", addr: "대구광역시 수성구 희망로 152", lat: 35.846602413059, lng: 128.615380791115 },
+  { name: "안동5", addr: "경상북도 안동시 하이마로 151", lat: 36.5634838762547, lng: 128.686355551867 },
+  { name: "포항중앙2", addr: "경상북도 포항시 북구 중흥로213번길 49", lat: 36.0250314041162, lng: 129.35309286161 },
+  { name: "스타필드고양", addr: "경기도 고양시 덕양구 고양대로 1955", lat: 37.6469771187284, lng: 126.89477806511 },
+  { name: "신세계파주2", addr: "경기도 파주시 탄현면 필승로 200", lat: 37.769351232912, lng: 126.695385303664 },
+  { name: "일산킨텍스", addr: "경기도 고양시 일산동구 월드고양로 102-33", lat: 37.6564415548054, lng: 126.755986529333 },
+  { name: "롯데광명", addr: "경기도 광명시 일직로 17", lat: 37.4243110028905, lng: 126.882779952497 },
+  { name: "안산상록수2", addr: "경기도 안산시 상록구 용신로 451-1", lat: 37.301633039173, lng: 126.872455599489 },
+  { name: "안양", addr: "경기도 안양시 만안구 안양로 238", lat: 37.394544621806, lng: 126.92539858096 },
+  { name: "기흥4", addr: "경기도 용인시 기흥구 신고매로 59", lat: 37.2234151888838, lng: 127.114248153439 },
+  { name: "롯데동탄2", addr: "경기도 화성시 동탄역로 160", lat: 37.200666359626, lng: 127.098203113972 },
+  { name: "롯데평촌", addr: "경기도 안양시 동안구 시민대로 180", lat: 37.390002179095, lng: 126.950178643649 },
+  { name: "분당2", addr: "경기도 성남시 분당구 대왕판교로 214", lat: 37.362801126292, lng: 127.102049973126 },
+  { name: "평택5", addr: "경기도 안성시 공도읍 진사리 10-3", lat: 36.9952492751305, lng: 127.143070384116 },
+  { name: "스타필드수원(6층)", addr: "경기도 수원시 장안구 수성로 175", lat: 37.2874453391147, lng: 126.991574559571 },
+  { name: "스타필드수원키즈(3층)", addr: "경기도 수원시 장안구 수성로 175", lat: 37.2874453391147, lng: 126.991574559571 },
+  { name: "롯데수지", addr: "경기도 용인시 수지구 성복2로 38", lat: 37.3127975899328, lng: 127.081666875865 },
+  { name: "롯데안산(팝업)", addr: "경기도 안산시 단원구 고잔1길 12", lat: 37.3180026223813, lng: 126.834500352801 },
+  { name: "롯데청량리", addr: "서울특별시 동대문구 왕산로 214", lat: 37.584197400389, lng: 127.05114503929 },
+  { name: "롯데미아", addr: "서울특별시 강북구 도봉로 62", lat: 37.6145929759749, lng: 127.030517678336 },
+  { name: "서대전3", addr: "대전광역시 중구 중앙로 8", lat: 36.3222727348179, lng: 127.41329440936 },
+  { name: "서산4", addr: "충청남도 서산시 서해로 3449", lat: 36.7724387469, lng: 126.460458766671 },
+  { name: "세종2", addr: "세종특별자치시 세종로 1232", lat: 36.512616139633, lng: 127.24188794499 },
+  { name: "천안신방3", addr: "충청남도 천안시 동남구 신방동 787-5", lat: 36.7889938797985, lng: 127.119570053549 },
+  { name: "청남3", addr: "충청북도 청주시 서원구 남이면 가구단지길 21-3", lat: 36.5574661318844, lng: 127.42896294898 },
+  { name: "청주6", addr: "충청북도 청주시 상당구 용암동 1587", lat: 36.6079868958013, lng: 127.501667487883 },
+  { name: "청주중앙4", addr: "충청북도 청주시 흥덕구 강서동 123-5", lat: 36.6215466899962, lng: 127.424039787664 },
+  { name: "신세계대전(팝업)", addr: "대전광역시 유성구 엑스포로 1", lat: 36.3751817693989, lng: 127.381765372066 },
+  { name: "NC대전유성", addr: "대전광역시 유성구 계룡로 119", lat: 36.3537391187102, lng: 127.344039589561 },
+  { name: "광천5", addr: "광주광역시 서구 무진대로 956", lat: 35.1606227483692, lng: 126.884944417898 },
+  { name: "덕진2", addr: "전라북도 전주시 덕진구 송천중앙로 6", lat: 35.8477836954033, lng: 127.118318745572 },
+  { name: "봉선5", addr: "광주광역시 남구 봉선로 16", lat: 35.1315482620245, lng: 126.90240827436 },
+  { name: "빛고을3", addr: "광주광역시 광산구 하남대로 352", lat: 35.1782047964161, lng: 126.832205576514 },
+  { name: "순천4", addr: "전라남도 순천시 중앙로 118", lat: 34.9561156944686, lng: 127.484313314063 },
+  { name: "전군2", addr: "전라북도 김제시 백구면 영상3길 28-26", lat: 35.8764948963642, lng: 126.999179660399 },
+  { name: "중화산4", addr: "전라북도 전주시 완산구 중화산동2가 528-6", lat: 35.8127713597618, lng: 127.119470194643 },
+  { name: "제주5", addr: "제주특별자치도 제주시 연삼로 252", lat: 33.4920305936105, lng: 126.51925153494 },
+  { name: "부천점", addr: "경기도 부천시 원미구 길주로 462", lat: 37.5045762195307, lng: 126.7938976482 },
+  { name: "현대백화점중동점", addr: "경기도 부천시 길주로 180 현대백화점 중동점 7층", lat: 37.5043163132049, lng: 126.76208267382 },
+  { name: "롯데인천점", addr: "인천광역시 미추홀구 연남로35 롯데백화점 인천점 5층", lat: 37.4425062298688, lng: 126.701518656221 },
+  { name: "원주3", addr: "강원도 원주시 호저면 원문로 668-9", lat: 37.3517801793616, lng: 127.896785516618 },
+  { name: "춘천3", addr: "강원도 춘천시 동면 만천리 700", lat: 37.883767590444, lng: 127.763193053119 },
+  { name: "울산5", addr: "울산광역시 남구 삼산로 361", lat: 35.5401490138604, lng: 129.346536045624 },
+  { name: "거제4", addr: "경상남도 거제시 수양로 454-40", lat: 34.8958210624869, lng: 128.642286096612 },
+  { name: "김해2", addr: "경상남도 김해시 금관대로 1053", lat: 35.2222220276392, lng: 128.848006055546 },
+  { name: "롯데동부산2", addr: "부산광역시 기장군 동부산관광로 8", lat: 35.1928254119026, lng: 129.214956053184 },
+  { name: "마산6", addr: "경상남도 창원시 마산합포구 북성로 34", lat: 35.2103995807488, lng: 128.572657608978 },
+  { name: "양산3", addr: "경상남도 양산시 물금읍 황산로 497", lat: 35.3188297700752, lng: 128.994064345878 },
+  { name: "연제4", addr: "부산광역시 연제구 거제동 46-2", lat: 35.1927407180549, lng: 129.078287223612 },
+  { name: "진주2", addr: "경상남도 진주시 진주대로 638", lat: 35.1635500873517, lng: 128.106507113436 },
+  { name: "창원3", addr: "경상남도 창원시 의창구 창원대로 360", lat: 35.2359037570239, lng: 128.637502814247 },
+  { name: "하단3", addr: "부산광역시 사하구 낙동남로 1359", lat: 35.1065406343053, lng: 128.960424544551 },
+  { name: "롯데광복2", addr: "부산광역시 중구 중앙대로 2", lat: 35.0979848964696, lng: 129.036632251021 },
+  { name: "송도5", addr: "인천광역시 연수구 송도국제대로 165", lat: 37.3802255186684, lng: 126.656372166201 },
+  { name: "인천검단", addr: "인천광역시 서구 원당대로 847", lat: 37.5939947904938, lng: 126.69596971755 },
+  { name: "인천중앙2", addr: "인천광역시 남동구 인주대로 644", lat: 37.4493893179779, lng: 126.708409852807 },
+  { name: "김포5", addr: "경기도 김포시 풍무동 27-4", lat: 37.6124858877096, lng: 126.724539560515 },
+  { name: "의정부8", addr: "경기도 의정부시 민락로 397", lat: 37.7567514881101, lng: 127.112677905904 },
+  { name: "신세계시흥2", addr: "경기도 시흥시 서해안로 699", lat: 37.3796755964231, lng: 126.736985310798 },
+  { name: "롯데구리", addr: "경기도 구리시 경춘로 261", lat: 37.6027360022071, lng: 127.143796142875 },
+  { name: "롯데영등포", addr: "서울특별시 영등포구 경인로 846", lat: 37.5156680341198, lng: 126.907665995469 },
+];
+
+function displayName(store) {
+  var n = store.name;
+  if (store.brand === '일룸') {
+    n = n.replace(/\d+$/, '');
+    if (!/점/.test(n)) n += '점';
+  }
+  if (n.indexOf(store.brand) === 0) n = n.substring(store.brand.length).replace(/^\s+/, '');
+  return n;
+}
+
+function getRegion(addr) {
+  if (addr.indexOf('서울') === 0) return '서울';
+  if (addr.indexOf('인천') === 0) return '인천';
+  if (addr.indexOf('경기') === 0) return '경기';
+  if (addr.indexOf('대전') === 0) return '대전';
+  if (addr.indexOf('충청북도') === 0 || addr.indexOf('충북') === 0) return '충북';
+  if (addr.indexOf('세종') === 0) return '충남';
+  if (addr.indexOf('충청남도') === 0 || addr.indexOf('충남') === 0) return '충남';
+  if (addr.indexOf('대구') === 0) return '대구';
+  if (addr.indexOf('경상북도') === 0 || addr.indexOf('경북') === 0) return '경북';
+  if (addr.indexOf('경상남도') === 0 || addr.indexOf('경남') === 0) return '경남';
+  if (addr.indexOf('부산') === 0) return '부산';
+  if (addr.indexOf('울산') === 0) return '울산';
+  if (addr.indexOf('광주') === 0) return '광주';
+  if (addr.indexOf('전라북도') === 0 || addr.indexOf('전북') === 0) return '전북';
+  if (addr.indexOf('전라남도') === 0 || addr.indexOf('전남') === 0) return '전남';
+  if (addr.indexOf('강원') === 0) return '강원';
+  if (addr.indexOf('제주') === 0) return '제주';
+  return '기타';
+}
+
+var REGION_ORDER = ['서울','인천','경기','대전','충북','충남','대구','경북','부산','울산','경남','광주','전북','전남','강원','제주'];
+
+// ══════════════════════════════════════════
+// 통합 매장 배열 구성 (일룸 + 경쟁사)
+// ══════════════════════════════════════════
+var allStores = [];
+var idCounter = 0;
+
+// 일룸 직영매장 (P샵)
+var ILOOM_DIRECT = ['논현4','마포2','대전둔산5','송파4','용산2','수원광교3','대구3','노원','강동아이파크','분당서현','부산센텀4'];
+var iloomDirectSet = {};
+for (var d = 0; d < ILOOM_DIRECT.length; d++) iloomDirectSet[ILOOM_DIRECT[d]] = true;
+
+// 일룸 매장
+for (var i = 0; i < STORES_RAW.length; i++) {
+  var s = STORES_RAW[i];
+  allStores.push({
+    name: s.name, addr: s.addr, lat: s.lat, lng: s.lng,
+    id: idCounter++, brand: '일룸', region: getRegion(s.addr),
+    stype: iloomDirectSet[s.name] ? '직영' : '대리', marker: null
+  });
+}
+
+// 경쟁사 매장 (competitors_data.js에서 로드)
+if (typeof COMPETITORS_RAW !== 'undefined') {
+  for (var j = 0; j < COMPETITORS_RAW.length; j++) {
+    var c = COMPETITORS_RAW[j];
+    allStores.push({
+      name: c.name, addr: c.addr, lat: parseFloat(c.lat), lng: parseFloat(c.lng),
+      id: idCounter++, brand: c.brand, region: getRegion(c.addr),
+      place_name: c.place_name, stype: c.stype || '', marker: null
+    });
+  }
+}
+
+offsetOverlappingStores();
+
+var activeFilter = '전체';
+var activeBrands = { '일룸': true, '한샘': true, '리바트': true, '까사미아': true, '에몬스': true };
+var activeStoreId = null;
+var mapEngine = null;
+var mapObj = null;
+var radiusCircle = null; // 반경 원
+var selectedLabel = null; // 선택된 매장 라벨
+var currentRadius = 5; // km (슬라이더 기본값)
+var heatmapCircles = [];
+var heatmapActive = false;
+var compareMode = false;
+var compareList = [];
+
+// 헤더 카운트 업데이트
+document.getElementById('totalCount').textContent = allStores.length;
+
+// ══════════════════════════════════════════
+// 마커 아이콘 생성
+// ══════════════════════════════════════════
+function makeMarkerSvg(color) {
+  return '<svg width="24" height="30" viewBox="0 0 24 30"><path d="M12 0C5.37 0 0 5.37 0 12c0 7.73 12 18 12 18S24 19.73 24 12C24 5.37 18.63 0 12 0z" fill="' + color + '"/><circle cx="12" cy="12" r="4.5" fill="white" opacity="0.9"/></svg>';
+}
+
+// Canvas로 PNG 마커 이미지 생성 (카카오용)
+var _markerPngCache = {};
+function makeMarkerPng(color, size) {
+  size = size || 'large';
+  var dims = { large: [28, 36], medium: [20, 26], small: [14, 18] }[size] || [28, 36];
+  var cacheKey = color + '_' + size;
+  if (_markerPngCache[cacheKey]) return _markerPngCache[cacheKey];
+  var w = dims[0], h = dims[1];
+  var c = document.createElement('canvas'); c.width = w; c.height = h;
+  var ctx = c.getContext('2d');
+  // 핀 모양
+  ctx.beginPath();
+  ctx.moveTo(w/2, h);
+  ctx.bezierCurveTo(w/2, h, 0, h*0.6, 0, w/2);
+  ctx.arc(w/2, w/2, w/2, Math.PI, 0, false);
+  ctx.bezierCurveTo(w, h*0.6, w/2, h, w/2, h);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = size === 'small' ? 1 : 1.5;
+  ctx.stroke();
+  // 중앙 흰 점
+  var dotR = size === 'small' ? 2.5 : (size === 'medium' ? 3.5 : 5);
+  ctx.beginPath();
+  ctx.arc(w/2, w/2, dotR, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.fill();
+  _markerPngCache[cacheKey] = c.toDataURL('image/png');
+  return _markerPngCache[cacheKey];
+}
+
+function makeLeafletIcon(brand) {
+  var color = BRAND_COLORS[brand] || '#ff6b35';
+  return L.divIcon({
+    className: '',
+    html: makeMarkerSvg(color),
+    iconSize: [24, 30], iconAnchor: [12, 30], tooltipAnchor: [0, -30],
+  });
+}
+
+// ══════════════════════════════════════════
+// 같은 위치 마커 오프셋 처리
+// ══════════════════════════════════════════
+function offsetOverlappingStores() {
+  var coordMap = {};
+  allStores.forEach(function(s) {
+    var key = s.lat.toFixed(4) + ',' + s.lng.toFixed(4);
+    if (!coordMap[key]) coordMap[key] = [];
+    coordMap[key].push(s);
+  });
+  Object.keys(coordMap).forEach(function(key) {
+    var group = coordMap[key];
+    if (group.length <= 1) return;
+    var angleStep = (2 * Math.PI) / group.length;
+    var offset = 0.0003; // ~30m
+    group.forEach(function(s, i) {
+      s.lat = s.lat + offset * Math.cos(angleStep * i);
+      s.lng = s.lng + offset * Math.sin(angleStep * i);
+    });
+  });
+}
+
+// ══════════════════════════════════════════
+// 지도 엔진 초기화: 카카오 우선, 실패시 Leaflet
+// ══════════════════════════════════════════
+function tryKakao() {
+  try {
+    if (typeof kakao === 'undefined' || !kakao.maps) return false;
+    kakao.maps.load(function() {
+      mapEngine = 'kakao';
+      document.getElementById('engineBadge').textContent = 'Kakao Maps';
+      var container = document.getElementById('map');
+      mapObj = new kakao.maps.Map(container, {
+        center: new kakao.maps.LatLng(36.5, 127.8),
+        level: 12
+      });
+      var markerImages = { large: {}, medium: {}, small: {} };
+      Object.keys(BRAND_COLORS).forEach(function(b) {
+        markerImages.large[b]  = new kakao.maps.MarkerImage(makeMarkerPng(BRAND_COLORS[b], 'large'),  new kakao.maps.Size(28, 36), { offset: new kakao.maps.Point(14, 36) });
+        markerImages.medium[b] = new kakao.maps.MarkerImage(makeMarkerPng(BRAND_COLORS[b], 'medium'), new kakao.maps.Size(20, 26), { offset: new kakao.maps.Point(10, 26) });
+        markerImages.small[b]  = new kakao.maps.MarkerImage(makeMarkerPng(BRAND_COLORS[b], 'small'),  new kakao.maps.Size(14, 18), { offset: new kakao.maps.Point(7, 18) });
+      });
+      // level ≤ 6: large, 7-9: medium, ≥ 10: small
+      function sizeForLevel(lv) { return lv <= 6 ? 'large' : (lv <= 9 ? 'medium' : 'small'); }
+      var currentMarkerSize = sizeForLevel(mapObj.getLevel());
+      var floatTip = document.getElementById('kakao-float-tooltip');
+      allStores.forEach(function(store) {
+        var pos = new kakao.maps.LatLng(store.lat, store.lng);
+        var imgSet = markerImages[currentMarkerSize];
+        var img = imgSet[store.brand] || imgSet['일룸'];
+        var zMap = {'일룸':10,'한샘':8,'리바트':6,'까사미아':4,'에몬스':2};
+        var marker = new kakao.maps.Marker({ position: pos, map: mapObj, image: img, clickable: true, zIndex: zMap[store.brand]||1 });
+        kakao.maps.event.addListener(marker, 'click', function() {
+          if (compareMode) toggleCompare(store.id);
+          else selectStore(store.id);
+        });
+        var bc = BRAND_COLORS[store.brand] || '#e8463a';
+        kakao.maps.event.addListener(marker, 'mouseover', function() {
+          if (activeStoreId === store.id) return;
+          floatTip.innerHTML = '<span style="color:' + bc + ';">' + store.brand + '</span> ' + displayName(store);
+          var proj = mapObj.getProjection();
+          var point = proj.containerPointFromCoords(pos);
+          floatTip.style.left = point.x + 'px';
+          floatTip.style.top = point.y + 'px';
+          floatTip.style.display = 'block';
+        });
+        kakao.maps.event.addListener(marker, 'mouseout', function() { floatTip.style.display = 'none'; });
+        store.marker = marker;
+        store._pos = pos;
+      });
+      // 줌 레벨 변경 시 마커 크기 자동 조정
+      kakao.maps.event.addListener(mapObj, 'zoom_changed', function() {
+        var newSize = sizeForLevel(mapObj.getLevel());
+        if (newSize === currentMarkerSize) return;
+        currentMarkerSize = newSize;
+        var imgSet = markerImages[newSize];
+        allStores.forEach(function(s) {
+          if (s.marker && s.marker.setImage) {
+            s.marker.setImage(imgSet[s.brand] || imgSet['일룸']);
+          }
+        });
+      });
+      renderStoreList();
+    });
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+function initLeaflet() {
+  mapEngine = 'leaflet';
+  document.getElementById('engineBadge').textContent = 'OpenStreetMap';
+  mapObj = L.map('map', { center: [36.5, 127.8], zoom: 7 });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(mapObj);
+  allStores.forEach(function(store) {
+    var icon = makeLeafletIcon(store.brand);
+    var zMap = {'일룸':1000,'한샘':800,'리바트':600,'까사미아':400,'에몬스':200};
+    var marker = L.marker([store.lat, store.lng], { icon: icon, zIndexOffset: zMap[store.brand]||100 }).addTo(mapObj);
+    var brandColor = BRAND_COLORS[store.brand] || '#ff6b35';
+    marker.bindTooltip('<span style="color:' + brandColor + ';font-weight:600;">' + store.brand + '</span> ' + displayName(store), { className: 'custom-tooltip', direction: 'top' });
+    marker.on('click', function() {
+      if (compareMode) toggleCompare(store.id);
+      else selectStore(store.id);
+    });
+    store.marker = marker;
+  });
+  renderStoreList();
+}
+
+var kakaoLoaded = tryKakao();
+if (!kakaoLoaded) {
+  initLeaflet();
+} else {
+  setTimeout(function() {
+    if (mapEngine !== 'kakao') initLeaflet();
+  }, 3000);
+}
+
+// ══════════════════════════════════════════
+// 브랜드 필터
+// ══════════════════════════════════════════
+function renderBrandFilters() {
+  var brands = ['일룸', '한샘', '리바트', '까사미아', '에몬스'];
+  var counts = {};
+  allStores.forEach(function(s) { counts[s.brand] = (counts[s.brand] || 0) + 1; });
+  document.getElementById('brandFilters').innerHTML = brands.map(function(b) {
+    var cnt = counts[b] || 0;
+    return '<button class="brand-btn active" data-brand="' + b + '" onclick="toggleBrand(\'' + b + '\')">' + b + ' (' + cnt + ')</button>';
+  }).join('');
+}
+
+function toggleBrand(brand) {
+  activeBrands[brand] = !activeBrands[brand];
+  var btn = document.querySelector('.brand-btn[data-brand="' + brand + '"]');
+  if (btn) btn.classList.toggle('active', activeBrands[brand]);
+  renderStoreList();
+  updateMarkers();
+}
+
+// ══════════════════════════════════════════
+// 지역 필터
+// ══════════════════════════════════════════
+function renderRegionFilters() {
+  var existing = {};
+  allStores.forEach(function(s) { existing[s.region] = true; });
+  var regions = ['전체'];
+  REGION_ORDER.forEach(function(r) { if (existing[r]) regions.push(r); });
+  document.getElementById('regionFilters').innerHTML = regions.map(function(r) {
+    return '<button class="region-btn ' + (r === activeFilter ? 'active' : '') + '" onclick="setFilter(\'' + r + '\')">' + r + '</button>';
+  }).join('');
+}
+
+var districtPolygons = [];
+function clearDistrictBoundaries() {
+  districtPolygons.forEach(function(p) {
+    if (mapEngine === 'kakao') p.setMap(null);
+    else if (mapEngine === 'leaflet' && mapObj) mapObj.removeLayer(p);
+  });
+  districtPolygons = [];
+}
+
+function drawDistrictBoundaries(region) {
+  clearDistrictBoundaries();
+  if (region === '전체' || typeof DISTRICT_BOUNDARIES === 'undefined') return;
+  var districts = DISTRICT_BOUNDARIES.filter(function(d) { return d.sido === region; });
+  if (districts.length === 0) { console.warn('경계 데이터 없음:', region); return; }
+  console.log('경계 그리기:', region, districts.length + '개');
+
+  districts.forEach(function(d) {
+    var polys = d.type === 'MultiPolygon' ? d.coords : [d.coords];
+    polys.forEach(function(poly) {
+      var outer = poly[0];
+      if (!outer || outer.length < 3) return;
+      if (mapEngine === 'kakao' && mapObj) {
+        var path = outer.map(function(c) { return new kakao.maps.LatLng(c[1], c[0]); });
+        var polygon = new kakao.maps.Polygon({
+          map: mapObj,
+          path: path,
+          strokeWeight: 3,
+          strokeColor: '#1d4ed8',
+          strokeOpacity: 1,
+          strokeStyle: 'solid',
+          fillColor: '#3b82f6',
+          fillOpacity: 0
+        });
+        districtPolygons.push(polygon);
+      } else if (mapEngine === 'leaflet' && mapObj) {
+        var latlngs = outer.map(function(c) { return [c[1], c[0]]; });
+        var polygon = L.polygon(latlngs, {
+          color: '#1d4ed8', weight: 3, opacity: 1,
+          fillColor: '#3b82f6', fillOpacity: 0
+        }).addTo(mapObj);
+        districtPolygons.push(polygon);
+      }
+    });
+  });
+  console.log('생성된 폴리곤:', districtPolygons.length);
+}
+
+function setFilter(region) {
+  activeFilter = region;
+  document.querySelectorAll('.region-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.textContent === region);
+  });
+  renderStoreList();
+  updateMarkers();
+  drawDistrictBoundaries(region);
+  if (document.getElementById('regionDashboard').classList.contains('visible')) {
+    showRegionDashboard(region);
+  }
+  // 해당 지역으로 지도 이동: 시도 경계 폴리곤의 bounding box 우선 사용
+  if (region === '전체') {
+    // 전국 매장 좌표 기반 bbox (실제 매장 분포로 fit)
+    var minLat=90,maxLat=-90,minLng=180,maxLng=-180;
+    allStores.forEach(function(s) {
+      if (s.lat < minLat) minLat = s.lat;
+      if (s.lat > maxLat) maxLat = s.lat;
+      if (s.lng < minLng) minLng = s.lng;
+      if (s.lng > maxLng) maxLng = s.lng;
+    });
+    var pad = 50;
+    if (mapEngine === 'kakao' && mapObj) {
+      var bounds = new kakao.maps.LatLngBounds(
+        new kakao.maps.LatLng(minLat, minLng),
+        new kakao.maps.LatLng(maxLat, maxLng)
+      );
+      mapObj.setBounds(bounds, pad, pad, pad, pad);
+    } else if (mapEngine === 'leaflet' && mapObj) {
+      mapObj.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [pad, pad], animate: true });
+    }
+  } else {
+    var minLat=90,maxLat=-90,minLng=180,maxLng=-180;
+    var found = false;
+    // 1순위: 매장 좌표로 bbox (도심 위주로 자연스럽게 fit)
+    var regionStores = allStores.filter(function(s) { return s.region === region; });
+    regionStores.forEach(function(s) {
+      if (s.lat < minLat) minLat = s.lat;
+      if (s.lat > maxLat) maxLat = s.lat;
+      if (s.lng < minLng) minLng = s.lng;
+      if (s.lng > maxLng) maxLng = s.lng;
+      found = true;
+    });
+    // 2순위: 매장이 없을 경우 경계 폴리곤
+    if (!found && typeof DISTRICT_BOUNDARIES !== 'undefined') {
+      var sidoBoundaries = DISTRICT_BOUNDARIES.filter(function(d) { return d.sido === region; });
+      sidoBoundaries.forEach(function(d) {
+        var polys = d.type === 'MultiPolygon' ? d.coords : [d.coords];
+        polys.forEach(function(poly) {
+          var outer = poly[0];
+          if (!outer) return;
+          outer.forEach(function(c) {
+            var lng = c[0], lat = c[1];
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            if (lng < minLng) minLng = lng;
+            if (lng > maxLng) maxLng = lng;
+            found = true;
+          });
+        });
+      });
+    }
+    if (found) {
+      // 패널 열려있으면 좌측 패딩 더 크게
+      var dashOpen = document.getElementById('regionDashboard').classList.contains('visible');
+      var pad = dashOpen ? 60 : 80;
+      if (mapEngine === 'kakao' && mapObj) {
+        var bounds = new kakao.maps.LatLngBounds(new kakao.maps.LatLng(minLat, minLng), new kakao.maps.LatLng(maxLat, maxLng));
+        mapObj.setBounds(bounds, pad, pad, pad, pad);
+      } else if (mapEngine === 'leaflet' && mapObj) {
+        mapObj.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [pad, pad], animate: true });
+      }
+    }
+  }
+}
+
+// ══════════════════════════════════════════
+// 필터링 + 목록 + 마커
+// ══════════════════════════════════════════
+function getFilteredStores() {
+  var query = document.getElementById('searchInput').value.toLowerCase();
+  return allStores.filter(function(s) {
+    var matchBrand = activeBrands[s.brand];
+    var matchRegion = activeFilter === '전체' || s.region === activeFilter;
+    var matchSearch = !query || s.name.toLowerCase().indexOf(query) !== -1 || s.addr.toLowerCase().indexOf(query) !== -1 || s.brand.toLowerCase().indexOf(query) !== -1 || (s.place_name && s.place_name.toLowerCase().indexOf(query) !== -1) || displayName(s).toLowerCase().indexOf(query) !== -1;
+    return matchBrand && matchRegion && matchSearch;
+  });
+}
+
+function renderStoreList() {
+  var filtered = getFilteredStores();
+  var list = document.getElementById('storeList');
+  document.getElementById('sidebarCount').textContent = filtered.length;
+  document.getElementById('filteredCount').textContent = filtered.length;
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="no-results">검색 결과가 없습니다</div>';
+    return;
+  }
+  list.innerHTML = filtered.map(function(s, idx) {
+    var dotColor = BRAND_COLORS[s.brand] || '#ff6b35';
+    var checkHtml = compareMode ? '<div class="compare-check ' + (compareList.indexOf(s.id) !== -1 ? 'checked' : '') + '" onclick="event.stopPropagation();toggleCompare(' + s.id + ')">&#10003;</div>' : '';
+    return '<div class="store-item ' + (s.id === activeStoreId ? 'active' : '') + '" onclick="' + (compareMode ? 'toggleCompare(' + s.id + ')' : 'selectStore(' + s.id + ')') + '">' +
+      checkHtml +
+      '<div class="store-brand-dot" style="background:' + dotColor + '"></div>' +
+      '<div class="store-info"><div class="store-name">' + s.brand + ' ' + displayName(s) + (s.stype ? '<span class="stype-tag ' + (s.stype === '직영' ? 'direct' : 'dealer') + '">' + s.stype + '</span>' : '') + '</div><div class="store-addr">' + s.addr + '</div></div>' +
+      '<div class="store-region-tag">' + s.region + '</div></div>';
+  }).join('');
+}
+
+function updateMarkers() {
+  var filtered = getFilteredStores();
+  var filteredIds = {};
+  filtered.forEach(function(s) { filteredIds[s.id] = true; });
+
+  if (mapEngine === 'kakao') {
+    allStores.forEach(function(s) {
+      if (s.marker) s.marker.setMap(filteredIds[s.id] ? mapObj : null);
+    });
+  } else {
+    allStores.forEach(function(s) {
+      if (!s.marker) return;
+      if (filteredIds[s.id]) { if (!mapObj.hasLayer(s.marker)) s.marker.addTo(mapObj); }
+      else { mapObj.removeLayer(s.marker); }
+    });
+  }
+  // 히트맵이 켜져 있으면 필터 반영하여 다시 그리기
+  if (heatmapActive) { clearHeatmap(); drawHeatmap(); }
+}
+
+// ══════════════════════════════════════════
+// 매출 데이터 매칭 + 거리 계산
+// ══════════════════════════════════════════
+// 매장명 키워드 추출: 브랜드명/접미어/백화점prefix 제거 후 한글 단어
+// 백화점 약어 매핑: 신세계↔S, 롯데↔L, 갤러리아↔G, AK플라자↔AK, 현대↔H
+function _extractKeywords(s) {
+  var cleaned = String(s || '')
+    .replace(/까사미아|마테라소|한샘|리바트|에몬스|일룸|현대리바트|리빙파워센터|플래그십/g, '')
+    .replace(/위탁|대리점|직매장|직영점|직영|전시장|샵$|쇼룸|팝업|매장|본사/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/신세계프리미엄아울렛|신세계사이먼|롯데프리미엄아울렛|롯데아울렛|롯데백화점|롯데몰|롯데|신세계|갤러리아|AK플라자|현대백화점|현대아울렛|스타필드시티|스타필드|이마트타운|디지털프라자/g, '')
+    .replace(/(^|\s)([SLGH])(?=[가-힣])/g, '$1')
+    .replace(/(^|\s)AK(?=[가-힣])/g, '$1')
+    .replace(/점$|아울렛/g, '')
+    .trim();
+  return cleaned.split(/\s+|[\-,_]/).filter(function(w) { return w.length >= 1; });
+}
+
+function _isClosed(brand, salesStoreName) {
+  return typeof CLOSED_STORES !== 'undefined' &&
+    CLOSED_STORES[brand] && CLOSED_STORES[brand][salesStoreName] !== undefined;
+}
+
+function findSalesData(brand, storeName, storeRegion) {
+  if (typeof SALES_DATA === 'undefined') return null;
+  // 1. 수기 매핑 테이블 (최우선 — 같은 매장의 다른 ID 합산 등 자동매칭으로 못 잡는 케이스)
+  if (typeof MARKER_TO_SALES !== 'undefined' && MARKER_TO_SALES[brand] && MARKER_TO_SALES[brand][storeName]) {
+    var target = MARKER_TO_SALES[brand][storeName];
+    if (Array.isArray(target)) {
+      var merged = null;
+      target.forEach(function(t) {
+        var f = SALES_DATA.find(function(d) { return d.brand === brand && d.store === t; });
+        if (!f) return;
+        if (!merged) merged = { brand: brand, store: storeName, region: f.region, area: f.area, s24: 0, s25: 0, monthly: [] };
+        merged.s24 += (f.s24 || 0); merged.s25 += (f.s25 || 0);
+        if (f.monthly) merged.monthly = merged.monthly.concat(f.monthly);
+      });
+      if (merged) return merged;
+    } else {
+      var explicit = SALES_DATA.find(function(d) { return d.brand === brand && d.store === target; });
+      if (explicit) return explicit;
+    }
+  }
+  // 2. 정확한 이름 매칭
+  var match = SALES_DATA.find(function(d) { return d.brand === brand && d.store === storeName && !_isClosed(brand, d.store); });
+  if (match) return match;
+  // 3. 부분 매칭
+  match = SALES_DATA.find(function(d) { return d.brand === brand && !_isClosed(brand, d.store) && (d.store.indexOf(storeName) !== -1 || storeName.indexOf(d.store) !== -1); });
+  if (match) return match;
+  // 4. 키워드 + region 매칭
+  if (storeRegion) {
+    var markerKw = _extractKeywords(storeName);
+    if (markerKw.length > 0) {
+      var candidates = SALES_DATA.filter(function(d) {
+        if (d.brand !== brand) return false;
+        if (d.region !== storeRegion) return false;
+        if (_isClosed(brand, d.store)) return false;
+        var sk = _extractKeywords(d.store);
+        return markerKw.some(function(k) {
+          return sk.some(function(s) { return s.indexOf(k) >= 0 || k.indexOf(s) >= 0; });
+        });
+      });
+      if (candidates.length === 1) return candidates[0];
+      if (candidates.length > 1) {
+        // 점수: 키워드 일치 × 100 + 매출 있음 × 10
+        candidates.forEach(function(c) {
+          var ckw = _extractKeywords(c.store);
+          var kwScore = markerKw.filter(function(k) {
+            return ckw.some(function(s) { return s.indexOf(k) >= 0 || k.indexOf(s) >= 0; });
+          }).length;
+          var hasSales = (c.s24 > 0 || c.s25 > 0) ? 1 : 0;
+          c._score = kwScore * 100 + hasSales * 10;
+        });
+        candidates.sort(function(a, b) { return b._score - a._score; });
+        return candidates[0];
+      }
+    }
+  }
+  return null;
+}
+
+function calcDistance(lat1, lng1, lat2, lng2) {
+  var R = 6371;
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLng = (lng2 - lng1) * Math.PI / 180;
+  var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2) * Math.sin(dLng/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function formatSales(val) {
+  if (!val || val === 0) return '-';
+  var eok = val / 100000000;
+  if (eok >= 1) return eok.toFixed(1) + '억';
+  var man = val / 10000;
+  return Math.round(man).toLocaleString() + '만';
+}
+
+function findNearbyCompetitors(store, radiusKm) {
+  var nearby = [];
+  allStores.forEach(function(s) {
+    if (s.id === store.id) return;
+    if (s.brand === store.brand) return;
+    var dist = calcDistance(store.lat, store.lng, s.lat, s.lng);
+    if (dist <= radiusKm) {
+      var sales = findSalesData(s.brand, s.name, s.region);
+      nearby.push({ store: s, dist: dist, sales: sales });
+    }
+  });
+  nearby.sort(function(a, b) {
+    var sa = (a.sales && a.sales.s25) ? a.sales.s25 : 0;
+    var sb = (b.sales && b.sales.s25) ? b.sales.s25 : 0;
+    return sb - sa;
+  });
+  return nearby;
+}
+
+function selectStore(id) {
+  activeStoreId = id;
+  var store = allStores.find(function(s) { return s.id === id; });
+  if (!store) return;
+  renderStoreList();
+
+  var tagEl = document.getElementById('panelTag');
+  tagEl.textContent = store.brand;
+  tagEl.style.color = BRAND_COLORS[store.brand] || '#ff6b35';
+
+  var panelNameEl = document.getElementById('panelName');
+  panelNameEl.innerHTML = store.brand + ' ' + displayName(store) + (store.stype ? ' <span class="stype-tag ' + (store.stype === '직영' ? 'direct' : 'dealer') + '" style="font-size:11px;padding:2px 7px;">' + store.stype + '</span>' : '');
+  document.getElementById('panelAddr').textContent = store.addr;
+
+  // 매출 데이터
+  var salesHtml = '';
+  var mySales = findSalesData(store.brand, store.name, store.region);
+  if (mySales) {
+    var change = mySales.s25 - mySales.s24;
+    var changePct = mySales.s24 ? ((change / mySales.s24) * 100).toFixed(1) : 0;
+    var changeClass = change >= 0 ? 'up' : 'down';
+    var changeSign = change >= 0 ? '+' : '';
+    var rankChange = mySales.r24 - mySales.r25;
+    var rankArrow = rankChange > 0 ? '&#9650; ' + rankChange : (rankChange < 0 ? '&#9660; ' + Math.abs(rankChange) : '-');
+    var rankColor = rankChange > 0 ? '#34d399' : (rankChange < 0 ? '#f87171' : 'var(--text-dim)');
+    salesHtml = '<div class="panel-section"><div class="panel-section-title">매출 현황</div>' +
+      '<div class="sales-card">' +
+      '<div class="sales-row"><span class="sales-label">2025 연누계</span><span class="sales-value">' + formatSales(mySales.s25) + '</span></div>' +
+      '<div class="sales-row"><span class="sales-label">2024 연누계</span><span class="sales-value" style="color:var(--text-muted);font-size:12px;">' + formatSales(mySales.s24) + '</span></div>' +
+      '<div class="sales-row"><span class="sales-label">전년 대비</span><span class="sales-change ' + changeClass + '">' + changeSign + changePct + '%</span></div>' +
+      '<div class="sales-row"><span class="sales-label">전국 순위</span><span class="rank-badge" style="color:' + rankColor + ';">' + mySales.r25 + '위 <span style="font-size:10px;">' + rankArrow + '</span></span></div>' +
+      '</div></div>';
+  }
+  document.getElementById('panelSalesSection').innerHTML = salesHtml;
+
+  // 반경 슬라이더 값 반영
+  document.getElementById('radiusSlider').value = currentRadius;
+  document.getElementById('radiusVal').textContent = currentRadius + 'km';
+
+  // 근접 경쟁사
+  var nearby = findNearbyCompetitors(store, currentRadius);
+  var compHtml = '';
+  if (nearby.length > 0) {
+    // 매출 바 차트 데이터 (선택된 매장 포함)
+    var barData = [];
+    if (mySales) {
+      barData.push({ brand: store.brand, name: store.name, sales: mySales.s25, color: BRAND_COLORS[store.brand] });
+    }
+    nearby.forEach(function(n) {
+      if (n.sales && n.sales.s25 > 0) {
+        barData.push({ brand: n.store.brand, name: n.store.name, sales: n.sales.s25, color: BRAND_COLORS[n.store.brand], dist: n.dist });
+      }
+    });
+    barData.sort(function(a, b) { return b.sales - a.sales; });
+    var maxSales = barData.length > 0 ? barData[0].sales : 1;
+
+    // 바 차트
+    var barHtml = '';
+    if (barData.length > 1) {
+      barHtml = '<div class="panel-section"><div class="panel-section-title">반경 ' + currentRadius + 'km 매출 비교</div><div class="bar-chart">';
+      barData.slice(0, 8).forEach(function(d) {
+        var pct = Math.max(5, (d.sales / maxSales) * 100);
+        barHtml += '<div class="bar-row">' +
+          '<div class="bar-label">' + d.brand + '</div>' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + d.color + ';"><span class="bar-value">' + formatSales(d.sales) + '</span></div></div></div>';
+      });
+      barHtml += '</div></div>';
+    }
+
+    // 경쟁사 리스트 (최대 10개)
+    compHtml = '<div class="panel-section"><div class="panel-section-title">근접 경쟁사 (' + nearby.length + ')</div>';
+    nearby.slice(0, 10).forEach(function(n) {
+      var distStr = n.dist < 1 ? Math.round(n.dist * 1000) + 'm' : n.dist.toFixed(1) + 'km';
+      var salesStr = n.sales ? formatSales(n.sales.s25) : '';
+      compHtml += '<div class="competitor-row">' +
+        '<div class="brand-dot" style="background:' + (BRAND_COLORS[n.store.brand] || '#888') + ';"></div>' +
+        '<div class="comp-info"><div class="comp-name">' + n.store.brand + ' ' + displayName(n.store) + '</div><div class="comp-dist">' + distStr + '</div></div>' +
+        (salesStr ? '<div class="comp-sales">' + salesStr + '</div>' : '') +
+        '</div>';
+    });
+    compHtml += '</div>';
+    compHtml = barHtml + compHtml;
+  } else {
+    compHtml = '<div class="panel-section"><div class="panel-section-title">근접 경쟁사</div><div style="font-size:11px;color:var(--text-dim);text-align:center;padding:12px;">반경 ' + currentRadius + 'km 내 경쟁사 없음</div></div>';
+  }
+  document.getElementById('panelCompetitorSection').innerHTML = compHtml;
+
+  document.getElementById('infoPanel').classList.add('visible');
+
+  // 기존 반경 원/라벨 제거
+  removeRadiusCircle();
+  removeSelectedLabel();
+
+  var brandColor = BRAND_COLORS[store.brand] || '#e8463a';
+  var labelText = store.brand + ' ' + displayName(store);
+
+  if (mapEngine === 'kakao' && mapObj) {
+    mapObj.setCenter(new kakao.maps.LatLng(store.lat, store.lng));
+    mapObj.setLevel(3);
+    // 매장명 라벨
+    var labelContent = '<div class="selected-label" style="border-color:' + brandColor + ';">' +
+      '<span style="color:' + brandColor + ';">' + store.brand + '</span> ' + displayName(store) + '</div>';
+    selectedLabel = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(store.lat, store.lng),
+      content: labelContent,
+      yAnchor: 2.4,
+      map: mapObj
+    });
+    // 카카오 반경 원
+    radiusCircle = new kakao.maps.Circle({
+      center: new kakao.maps.LatLng(store.lat, store.lng),
+      radius: currentRadius * 1000,
+      strokeWeight: 2,
+      strokeColor: '#e8463a',
+      strokeOpacity: 0.6,
+      strokeStyle: 'dash',
+      fillColor: '#e8463a',
+      fillOpacity: 0.08,
+      map: mapObj
+    });
+  } else if (mapEngine === 'leaflet' && mapObj) {
+    mapObj.setView([store.lat, store.lng], 16, { animate: true });
+    // 매장명 라벨
+    selectedLabel = L.tooltip({ permanent: true, direction: 'top', className: 'selected-label-leaflet', offset: [0, -20] })
+      .setLatLng([store.lat, store.lng])
+      .setContent('<span style="color:' + brandColor + ';font-weight:700;">' + store.brand + '</span> ' + displayName(store))
+      .addTo(mapObj);
+    // Leaflet 반경 원
+    radiusCircle = L.circle([store.lat, store.lng], {
+      radius: currentRadius * 1000,
+      color: '#e8463a',
+      weight: 2,
+      opacity: 0.6,
+      dashArray: '8,6',
+      fillColor: '#e8463a',
+      fillOpacity: 0.08
+    }).addTo(mapObj);
+  }
+
+  var el = document.querySelector('.store-item.active');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function removeSelectedLabel() {
+  if (!selectedLabel) return;
+  if (mapEngine === 'kakao') selectedLabel.setMap(null);
+  else if (mapEngine === 'leaflet' && mapObj) mapObj.removeLayer(selectedLabel);
+  selectedLabel = null;
+}
+
+function removeRadiusCircle() {
+  if (!radiusCircle) return;
+  if (mapEngine === 'kakao') radiusCircle.setMap(null);
+  else if (mapEngine === 'leaflet' && mapObj) mapObj.removeLayer(radiusCircle);
+  radiusCircle = null;
+}
+
+function closePanel() {
+  document.getElementById('infoPanel').classList.remove('visible');
+  removeRadiusCircle();
+  removeSelectedLabel();
+  activeStoreId = null;
+  renderStoreList();
+}
+
+document.getElementById('searchInput').addEventListener('input', function() {
+  renderStoreList();
+  updateMarkers();
+});
+
+renderBrandFilters();
+renderRegionFilters();
+renderStoreList();
+
+// ══════════════════════════════════════════
+// 비교 모드
+// ══════════════════════════════════════════
+function toggleCompareMode() {
+  compareMode = !compareMode;
+  compareList = [];
+  document.getElementById('btnCompareMode').classList.toggle('active', compareMode);
+  document.getElementById('compareBar').classList.toggle('visible', compareMode);
+  document.getElementById('compareCount').textContent = '0';
+  document.getElementById('btnRunCompare').disabled = true;
+  closeCompare();
+  if (!compareMode) closePanel();
+  renderStoreList();
+}
+
+function toggleCompare(id) {
+  var idx = compareList.indexOf(id);
+  if (idx !== -1) {
+    compareList.splice(idx, 1);
+  } else {
+    if (compareList.length >= 6) return;
+    compareList.push(id);
+  }
+  document.getElementById('compareCount').textContent = compareList.length;
+  document.getElementById('btnRunCompare').disabled = compareList.length < 2;
+  renderStoreList();
+}
+
+function runCompare() {
+  if (compareList.length < 2) return;
+  var stores = compareList.map(function(id) {
+    return allStores.find(function(s) { return s.id === id; });
+  }).filter(Boolean);
+
+  var rows = stores.map(function(s) {
+    var sales = findSalesData(s.brand, s.name, s.region);
+    return { store: s, sales: sales };
+  });
+
+  var html = '<div style="font-size:16px;font-weight:700;margin-bottom:18px;letter-spacing:-0.3px;">매장 비교</div>';
+
+  // 카드형 레이아웃 (매장별)
+  rows.forEach(function(r, idx) {
+    var brandColor = BRAND_COLORS[r.store.brand] || '#ff6b35';
+    var s25 = r.sales ? formatSales(r.sales.s25) : '-';
+    var s24 = r.sales ? formatSales(r.sales.s24) : '-';
+    var change = '-';
+    var changeStyle = 'color:var(--text-dim)';
+    if (r.sales && r.sales.s24 > 0) {
+      var pct = ((r.sales.s25 - r.sales.s24) / r.sales.s24 * 100).toFixed(1);
+      var isUp = pct >= 0;
+      change = (isUp ? '+' : '') + pct + '%';
+      changeStyle = 'color:' + (isUp ? '#34d399' : '#f87171');
+    }
+    var rank = r.sales ? r.sales.r25 + '위' : '-';
+    var stype = r.store.stype ? '<span class="stype-tag ' + (r.store.stype === '직영' ? 'direct' : 'dealer') + '" style="font-size:10px;padding:1px 5px;margin-left:4px;">' + r.store.stype + '</span>' : '';
+
+    html += '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ' + brandColor + ';border-radius:8px;padding:14px;margin-bottom:10px;">' +
+      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">' +
+        '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + brandColor + ';flex-shrink:0;"></span>' +
+        '<span style="font-weight:600;font-size:13px;">' + r.store.brand + ' ' + displayName(r.store) + stype + '</span>' +
+        '<span style="margin-left:auto;font-size:11px;color:var(--text-muted);">' + r.store.region + '</span>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:11px;">' +
+        '<div><div style="color:var(--text-dim);margin-bottom:2px;">2025 매출</div><div style="font-size:15px;font-weight:700;">' + s25 + '</div></div>' +
+        '<div><div style="color:var(--text-dim);margin-bottom:2px;">전년비</div><div style="font-size:15px;font-weight:700;' + changeStyle + '">' + change + '</div></div>' +
+        '<div><div style="color:var(--text-dim);margin-bottom:2px;">전국순위</div><div style="font-size:15px;font-weight:700;">' + rank + '</div></div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  // 매출 비교 바 차트
+  var barData = rows.filter(function(r) { return r.sales && r.sales.s25 > 0; });
+  if (barData.length > 0) {
+    var maxVal = Math.max.apply(null, barData.map(function(r) { return r.sales.s25; }));
+    html += '<div style="margin-top:8px;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;">' +
+      '<div style="font-size:12px;font-weight:600;margin-bottom:12px;color:var(--text-muted);">2025 매출 비교</div>';
+    barData.forEach(function(r) {
+      var pct = Math.max(5, (r.sales.s25 / maxVal) * 100);
+      var color = BRAND_COLORS[r.store.brand];
+      html += '<div class="bar-row"><div class="bar-label">' + r.store.brand + ' ' + displayName(r.store) + '</div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + ';"><span class="bar-value">' + formatSales(r.sales.s25) + '</span></div></div></div>';
+    });
+    html += '</div>';
+  }
+
+  document.getElementById('compareContent').innerHTML = html;
+  document.getElementById('comparePanel').classList.add('visible');
+  document.getElementById('infoPanel').classList.remove('visible');
+}
+
+// ══════════════════════════════════════════
+// 지역 대시보드
+// ══════════════════════════════════════════
+function showRegionDashboard(region) {
+  var isAll = (region === '전체');
+  var brands = ['일룸','한샘','리바트','까사미아','에몬스'];
+  var data = {};
+  brands.forEach(function(b) { data[b] = { count: 0, s24: 0, s25: 0 }; });
+
+  allStores.forEach(function(s) {
+    if (!isAll && s.region !== region) return;
+    if (!data[s.brand]) return;
+    data[s.brand].count++;
+    var sales = findSalesData(s.brand, s.name, s.region);
+    if (sales) {
+      if (sales.s25 > 0) data[s.brand].s25 += sales.s25;
+      if (sales.s24 > 0) data[s.brand].s24 += sales.s24;
+    }
+  });
+
+  var totalStores = 0, totalS24 = 0, totalS25 = 0;
+  brands.forEach(function(b) {
+    totalStores += data[b].count;
+    totalS24 += data[b].s24;
+    totalS25 += data[b].s25;
+  });
+  var maxSales = Math.max.apply(null, brands.map(function(b) { return data[b].s25; }));
+
+  // 매장당 매출 효율 계산 + 랭킹
+  var perStoreSales = {};
+  brands.forEach(function(b) {
+    perStoreSales[b] = (data[b].count > 0 && data[b].s25 > 0) ? data[b].s25 / data[b].count : 0;
+  });
+  var efficiencyRank = brands.slice().filter(function(b){return perStoreSales[b]>0;}).sort(function(a, b) {
+    return perStoreSales[b] - perStoreSales[a];
+  });
+
+  var title = isAll ? '전국 브랜드 현황' : region + ' 지역 현황';
+
+  // 인구통계 계산
+  var popTotal = 0, hhTotal = 0;
+  if (typeof POPULATION_DATA !== 'undefined') {
+    if (isAll) {
+      Object.keys(POPULATION_DATA).forEach(function(r) {
+        popTotal += POPULATION_DATA[r].pop;
+        hhTotal += POPULATION_DATA[r].household;
+      });
+    } else if (POPULATION_DATA[region]) {
+      popTotal = POPULATION_DATA[region].pop;
+      hhTotal = POPULATION_DATA[region].household;
+    }
+  }
+
+  var formatPop = function(n) {
+    if (n >= 10000) return (n / 10000).toFixed(0) + '만';
+    return n.toLocaleString();
+  };
+
+  var html = '<div class="rd-header">' + title + '</div>';
+  if (popTotal > 0) {
+    html += '<div class="rd-pop-line">인구 <strong>' + formatPop(popTotal) + '명</strong> · 세대 <strong>' + formatPop(hhTotal) + '</strong> <span style="font-size:10px;color:#6b7280;font-weight:400;margin-left:6px;">출처: 통계청 \'24년 주민등록인구</span></div>';
+  } else {
+    html += '<div style="margin-bottom:14px;"></div>';
+  }
+  // 마지막 업데이트 표시
+  if (typeof BRAND_CRITERIA !== 'undefined' && BRAND_CRITERIA.lastUpdated) {
+    var dataInfo = '매장 데이터 기준: <strong style="color:#fff;font-family:DM Mono,monospace;">' + BRAND_CRITERIA.lastUpdated + '</strong> 업데이트';
+    if (typeof SALES_META !== 'undefined' && SALES_META.latestMonth) {
+      dataInfo += ' · 매출 데이터: <strong style="color:#fff;font-family:DM Mono,monospace;">' + SALES_META.latestMonth + '</strong>까지';
+    }
+    html += '<div style="font-size:12px;color:#cbd5e1;margin-bottom:14px;padding-right:40px;">' + dataInfo + '</div>';
+  }
+
+  html += '<div class="rd-grid">';
+
+  // 전체 요약 카드
+  var totalChange = totalS24 > 0 ? ((totalS25 - totalS24) / totalS24 * 100).toFixed(1) : 0;
+  var totalChangeStyle = totalS25 >= totalS24 ? 'color:#34d399;' : 'color:#f87171;';
+  var totalChangeSign = totalS25 >= totalS24 ? '+' : '';
+  html += '<div class="rd-card" style="border-color:var(--border);">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<div style="font-size:15px;font-weight:700;color:#e2e8f0;">전체</div>' +
+      '<div style="font-size:28px;font-weight:700;font-family:DM Mono,monospace;color:#fff;">' + totalStores + '<span style="font-size:13px;font-weight:400;color:#cbd5e1;">개</span></div>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">' +
+      '<div style="font-size:13px;color:#cbd5e1;">24년 <span style="color:#e2e8f0;">' + (totalS24 > 0 ? formatSales(totalS24) : '-') + '</span></div>' +
+      '<div style="font-size:17px;font-weight:600;color:#fff;">25년 ' + (totalS25 > 0 ? formatSales(totalS25) : '-') + '</div>' +
+    '</div>' +
+    (totalS24 > 0 ? '<div style="text-align:right;font-size:13px;font-weight:600;margin-top:3px;' + totalChangeStyle + '">' + totalChangeSign + totalChange + '% YoY</div>' : '') +
+    '</div>';
+
+  // 브랜드별 카드 (클릭 시 매장별 상세)
+  brands.forEach(function(b) {
+    var d = data[b];
+    var bc = BRAND_COLORS[b];
+    var salesPct = maxSales > 0 ? (d.s25 / maxSales * 100) : 0;
+    var share = totalS25 > 0 ? (d.s25 / totalS25 * 100).toFixed(1) : 0;
+    var change = d.s24 > 0 ? ((d.s25 - d.s24) / d.s24 * 100).toFixed(1) : 0;
+    var changeStyle = d.s25 >= d.s24 ? 'color:#34d399;' : 'color:#f87171;';
+    var changeSign = d.s25 >= d.s24 ? '+' : '';
+    var popPerStore = d.count > 0 && popTotal > 0 ? Math.round(popTotal / d.count) : 0;
+    var salesPerHh = d.count > 0 && d.s25 > 0 && hhTotal > 0 ? Math.round(d.s25 / hhTotal) : 0;
+
+    // 매장당 매출 효율 + 순위
+    var perStore = perStoreSales[b];
+    var effRank = efficiencyRank.indexOf(b);
+    var effRankBadge = '';
+    if (perStore > 0 && effRank >= 0) {
+      var rankColors = ['#fbbf24', '#e5e7eb', '#fb923c', '#94a3b8', '#94a3b8'];
+      effRankBadge = '<span onclick="event.stopPropagation();openEfficiencyDetail(\'' + b + '\',\'' + region + '\')" title="효율 계산 방식 보기" style="display:inline-block;background:' + rankColors[effRank] + ';color:#000;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;cursor:pointer;">효율 ' + (effRank + 1) + '위</span>';
+    }
+
+    html += '<div class="rd-card" style="border-left:4px solid ' + bc + ';cursor:pointer;" onclick="toggleBrandDetail(\'' + b + '\',\'' + region + '\')">' +
+      // 헤더: 브랜드명 + 매장수
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        '<div style="font-size:17px;font-weight:700;color:' + bc + ';">' + b + ' <span style="font-size:12px;color:#fff;">▼</span></div>' +
+        '<div style="font-size:28px;font-weight:700;font-family:DM Mono,monospace;color:#fff;">' + d.count + '<span style="font-size:13px;font-weight:400;color:#cbd5e1;">개</span></div>' +
+      '</div>' +
+      // 매출
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">' +
+        '<div style="font-size:13px;color:#cbd5e1;">24년 <span style="color:#e2e8f0;">' + (d.s24 > 0 ? formatSales(d.s24) : '-') + '</span></div>' +
+        '<div style="font-size:17px;font-weight:600;color:#fff;">25년 ' + (d.s25 > 0 ? formatSales(d.s25) : '-') + '</div>' +
+      '</div>' +
+      (d.s24 > 0 ? '<div style="text-align:right;font-size:13px;font-weight:600;margin-top:3px;' + changeStyle + '">' + changeSign + change + '% YoY</div>' : '') +
+      // 점유율 바
+      '<div class="rd-bar-wrap" style="margin-top:8px;"><div class="rd-bar" style="width:' + salesPct + '%;background:' + bc + ';"></div></div>' +
+      '<div style="font-size:12px;color:#e2e8f0;margin-top:4px;text-align:right;">점유 <strong style="color:#fff;">' + share + '%</strong></div>' +
+      // 핵심 지표: 매장당 매출
+      (perStore > 0 ? '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+          '<span style="font-size:13px;color:#e2e8f0;">매장당 매출' + effRankBadge + '</span>' +
+          '<span style="font-size:17px;font-weight:700;color:#fff;font-family:DM Mono,monospace;">' + formatSales(perStore) + '</span>' +
+        '</div>' +
+        (popPerStore > 0 ? '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">' +
+          '<span style="font-size:13px;color:#e2e8f0;">매장 1개 커버</span>' +
+          '<span style="font-size:13px;font-weight:700;color:#fff;font-family:DM Mono,monospace;">' + formatPop(popPerStore) + '<span style="color:#cbd5e1;">명</span></span>' +
+        '</div>' : '') +
+      '</div>' : '') +
+      '</div>';
+  });
+  html += '</div>';
+  html += '<div id="brandDetailArea"></div>';
+  html += renderMarketAnalysis(region);
+
+  document.getElementById('regionDashboardContent').innerHTML = html;
+  document.getElementById('regionDashboard').classList.add('visible');
+}
+
+// 상권 단위 분석 (sales_data.area = market_group 기준)
+function renderMarketAnalysis(region) {
+  var isAll = (region === '전체');
+  var brands = ['일룸', '한샘', '리바트', '까사미아', '에몬스'];
+
+  // 상권별 집계: { area: { region, count, s25, s24, byBrand: { 일룸: count, ... }, stores: [] } }
+  var marketData = {};
+  allStores.forEach(function(s) {
+    if (!s.region) return;
+    if (!isAll && s.region !== region) return;
+    var sales = findSalesData(s.brand, s.name, s.region);
+    if (!sales || !sales.area) return;
+    var key = s.region + '|' + sales.area;
+    if (!marketData[key]) {
+      marketData[key] = { region: s.region, area: sales.area, count: 0, s24: 0, s25: 0, byBrand: {}, stores: [] };
+    }
+    var m = marketData[key];
+    m.count++;
+    if (sales.s24 > 0) m.s24 += sales.s24;
+    if (sales.s25 > 0) m.s25 += sales.s25;
+    m.byBrand[s.brand] = (m.byBrand[s.brand] || 0) + 1;
+    m.stores.push({ id: s.id, brand: s.brand, name: s.name, sales: sales });
+  });
+
+  var marketsList = Object.values(marketData);
+  if (marketsList.length === 0) return '';
+
+  // 매출 내림차순
+  marketsList.sort(function(a, b) { return b.s25 - a.s25; });
+
+  // 전체일 때는 Top 20만
+  var displayList = isAll ? marketsList.slice(0, 20) : marketsList;
+
+  var totalS25 = marketsList.reduce(function(a, b) { return a + b.s25; }, 0);
+  var totalCount = marketsList.reduce(function(a, b) { return a + b.count; }, 0);
+
+  var titleText = isAll ? '전국 상권 Top 20' : region + ' 상권별 분석';
+  var html = '<div style="margin-top:16px;padding:18px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">';
+  html += '<div style="font-size:15px;font-weight:700;color:#fff;">🏙️ ' + titleText + '</div>';
+  html += '<div style="font-size:11px;color:#94a3b8;">상권 ' + marketsList.length + '개 · 매장 ' + totalCount + '개</div>';
+  html += '</div>';
+
+  // 표 헤더
+  html += '<div style="background:var(--surface);border-radius:8px;overflow:hidden;border:1px solid var(--border);">';
+  var gridCols = (isAll ? '36px 1.5fr' : '36px 1.7fr') + ' 0.7fr 1.1fr 1.1fr 2.4fr';
+  html += '<div style="display:grid;grid-template-columns:' + gridCols + ';gap:8px;padding:12px 16px;background:var(--surface2);font-size:12px;color:#94a3b8;font-weight:600;border-bottom:1px solid var(--border);">';
+  html += '<span>#</span>';
+  html += '<span>' + (isAll ? '시도: 상권' : '상권') + '</span>';
+  html += '<span style="text-align:right;">매장</span>';
+  html += '<span style="text-align:right;">25년 매출</span>';
+  html += '<span style="text-align:right;">매장당</span>';
+  html += '<span>브랜드 분포</span>';
+  html += '</div>';
+
+  // 행
+  displayList.forEach(function(m, idx) {
+    var pct = totalS25 > 0 ? (m.s25 / totalS25 * 100) : 0;
+    var perStore = m.count > 0 ? Math.round(m.s25 / m.count) : 0;
+    var areaLabel = isAll ? (m.region + ': ' + m.area) : m.area;
+    var brandBadges = '';
+    Object.keys(m.byBrand).sort(function(a, b) { return brands.indexOf(a) - brands.indexOf(b); }).forEach(function(b) {
+      var bc = BRAND_COLORS[b] || '#888';
+      brandBadges += '<span style="display:inline-block;background:' + bc + ';color:#fff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px;margin-right:5px;margin-bottom:2px;">' + b + ' ' + m.byBrand[b] + '</span>';
+    });
+    html += '<div onclick="focusMarket(\'' + m.region + '\',' + JSON.stringify(m.area).replace(/"/g, '&quot;') + ')" style="display:grid;grid-template-columns:' + gridCols + ';gap:8px;padding:14px 16px;border-top:1px solid var(--border);align-items:center;cursor:pointer;font-size:14px;" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'transparent\'">';
+    html += '<span style="color:' + (idx < 3 ? '#fbbf24' : '#94a3b8') + ';font-weight:700;font-size:15px;">' + (idx + 1) + '</span>';
+    html += '<span style="color:#fff;font-weight:600;">' + areaLabel + '</span>';
+    html += '<span style="text-align:right;color:#fff;font-family:DM Mono,monospace;font-weight:600;">' + m.count + '</span>';
+    html += '<span style="text-align:right;color:#fff;font-family:DM Mono,monospace;font-weight:700;font-size:15px;">' + (m.s25 > 0 ? formatSales(m.s25) : '-') + '</span>';
+    html += '<span style="text-align:right;color:#cbd5e1;font-family:DM Mono,monospace;font-weight:600;">' + (perStore > 0 ? formatSales(perStore) : '-') + '</span>';
+    html += '<span style="line-height:1.7;">' + brandBadges + '</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<div style="font-size:10px;color:#6b7280;margin-top:8px;line-height:1.5;">';
+  html += '<strong style="color:#94a3b8;">출처:</strong> 매출비교대시보드 (Google Sheets) · <strong style="color:#94a3b8;">기준:</strong> 회사 사내 영업 권역 (인접 구/시 묶음, 행정구역과 다를 수 있음)';
+  if (isAll && marketsList.length > 20) {
+    html += '<br>전국 ' + marketsList.length + '개 상권 중 매출 상위 20개 표시';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  return html;
+}
+
+// 상권 클릭 → 해당 상권 매장만 강조 (지도 fit)
+function focusMarket(regionName, areaName) {
+  // 해당 상권 매장 찾기
+  var targetStores = allStores.filter(function(s) {
+    if (s.region !== regionName) return false;
+    var sales = findSalesData(s.brand, s.name, s.region);
+    return sales && sales.area === areaName;
+  });
+  if (targetStores.length === 0) return;
+  // 지도 bbox로 이동
+  var minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+  targetStores.forEach(function(s) {
+    minLat = Math.min(minLat, s.lat); maxLat = Math.max(maxLat, s.lat);
+    minLng = Math.min(minLng, s.lng); maxLng = Math.max(maxLng, s.lng);
+  });
+  var pad = 0.01;
+  if (mapEngine === 'kakao' && mapObj) {
+    var bounds = new kakao.maps.LatLngBounds();
+    bounds.extend(new kakao.maps.LatLng(minLat - pad, minLng - pad));
+    bounds.extend(new kakao.maps.LatLng(maxLat + pad, maxLng + pad));
+    mapObj.setBounds(bounds);
+  } else if (mapEngine === 'leaflet' && mapObj) {
+    mapObj.fitBounds([[minLat - pad, minLng - pad], [maxLat + pad, maxLng + pad]], { padding: [40, 40] });
+  }
+}
+
+function toggleBrandDetail(brand, region) {
+  var area = document.getElementById('brandDetailArea');
+  if (area.dataset.brand === brand && area.dataset.tab !== 'efficiency') { area.innerHTML = ''; area.dataset.brand = ''; return; }
+  area.dataset.brand = brand;
+  area.dataset.tab = 'sales';
+  renderBrandDetail(brand, region, 'sales');
+}
+
+function openEfficiencyDetail(brand, region) {
+  var area = document.getElementById('brandDetailArea');
+  if (area.dataset.brand === brand && area.dataset.tab === 'efficiency') { area.innerHTML = ''; area.dataset.brand = ''; return; }
+  area.dataset.brand = brand;
+  area.dataset.tab = 'efficiency';
+  renderBrandDetail(brand, region, 'efficiency');
+}
+
+function switchBrandTab(brand, region, tab) {
+  var area = document.getElementById('brandDetailArea');
+  area.dataset.tab = tab;
+  renderBrandDetail(brand, region, tab);
+}
+
+function renderBrandDetail(brand, region, tab) {
+  var area = document.getElementById('brandDetailArea');
+  var bc = BRAND_COLORS[brand] || '#888';
+  var isAll = (region === '전체');
+  tab = tab || 'sales';
+  // 지역 필터링 중에는 매장 기준/변경 이력 탭 비활성 → 강제로 sales
+  if (!isAll && (tab === 'criteria' || tab === 'history')) tab = 'sales';
+
+  function tabBtn(name, label) {
+    var active = tab === name;
+    return '<span onclick="switchBrandTab(\'' + brand + '\',\'' + region + '\',\'' + name + '\')" style="padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;' +
+      (active ? 'background:' + bc + ';color:#fff;' : 'background:transparent;color:#cbd5e1;border:1px solid var(--border);') + '">' + label + '</span>';
+  }
+
+  var header = '<div style="margin-top:14px;padding:18px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;">' +
+    '<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">' +
+      tabBtn('sales', '매장별 매출') +
+      tabBtn('efficiency', '효율 분석') +
+      (isAll ? tabBtn('criteria', '매장 기준') : '') +
+      (isAll ? tabBtn('history', '변경 이력') : '') +
+    '</div>';
+
+  var body = '';
+  if (tab === 'sales') body = renderBrandSalesTab(brand, region, bc);
+  else if (tab === 'efficiency') body = renderBrandEfficiencyTab(brand, region, bc);
+  else if (tab === 'criteria') body = renderBrandCriteriaTab(brand, bc);
+  else if (tab === 'history') body = renderBrandHistoryTab(brand, bc);
+
+  area.innerHTML = header + body + '</div>';
+}
+
+function renderBrandEfficiencyTab(brand, region, bc) {
+  var isAll = (region === '전체');
+  var brands = ['일룸', '한샘', '리바트', '까사미아', '에몬스'];
+
+  var data = {};
+  brands.forEach(function(b) { data[b] = { count: 0, s25: 0 }; });
+  allStores.forEach(function(s) {
+    if (data[s.brand] === undefined) return;
+    if (!isAll && s.region !== region) return;
+    data[s.brand].count++;
+    var sales = findSalesData(s.brand, s.name, s.region);
+    if (sales && sales.s25 > 0) data[s.brand].s25 += sales.s25;
+  });
+
+  var perStoreSales = {};
+  brands.forEach(function(b) {
+    perStoreSales[b] = (data[b].count > 0 && data[b].s25 > 0) ? data[b].s25 / data[b].count : 0;
+  });
+  var ranking = brands.slice().filter(function(b) { return perStoreSales[b] > 0; })
+    .sort(function(a, b) { return perStoreSales[b] - perStoreSales[a]; });
+
+  var popTotal = 0;
+  if (typeof POPULATION_DATA !== 'undefined') {
+    if (isAll) {
+      Object.keys(POPULATION_DATA).forEach(function(r) { popTotal += POPULATION_DATA[r].pop; });
+    } else if (POPULATION_DATA[region]) {
+      popTotal = POPULATION_DATA[region].pop;
+    }
+  }
+
+  var regionLabel = isAll ? '전국' : region;
+  var formatPop = function(n) {
+    if (n >= 10000) return (n / 10000).toFixed(0) + '만';
+    return n.toLocaleString();
+  };
+
+  var html = '<div style="max-height:460px;overflow-y:auto;padding-right:4px;">';
+
+  // 계산 방식 설명
+  html += '<div style="font-size:14px;font-weight:700;color:' + bc + ';margin-bottom:10px;">📐 계산 방식</div>';
+  html += '<div style="padding:14px 16px;background:var(--surface);border-radius:8px;margin-bottom:16px;border:1px solid var(--border);">';
+  html += '<div style="margin-bottom:12px;">';
+  html += '<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;">매장당 매출</div>';
+  html += '<div style="font-family:DM Mono,monospace;font-size:12px;color:#cbd5e1;padding:6px 10px;background:var(--surface2);border-radius:5px;display:inline-block;">브랜드 총 매출 ÷ 매장 수</div>';
+  html += '<div style="font-size:11px;color:#94a3b8;margin-top:5px;">매장 1곳이 평균적으로 만들어내는 매출</div>';
+  html += '</div>';
+  html += '<div>';
+  html += '<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;">매장 1개 커버</div>';
+  html += '<div style="font-family:DM Mono,monospace;font-size:12px;color:#cbd5e1;padding:6px 10px;background:var(--surface2);border-radius:5px;display:inline-block;">' + regionLabel + ' 인구 ÷ 매장 수</div>';
+  html += '<div style="font-size:11px;color:#94a3b8;margin-top:5px;">매장 1곳이 담당하는 잠재 고객 규모 (값이 클수록 매장 대비 인구 밀도↑)</div>';
+  html += '</div>';
+  html += '</div>';
+
+  // 효율 순위표
+  html += '<div style="font-size:14px;font-weight:700;color:' + bc + ';margin-bottom:10px;">🏆 ' + regionLabel + ' 지역 효율 순위</div>';
+  html += '<div style="background:var(--surface);border-radius:8px;overflow:hidden;border:1px solid var(--border);">';
+  html += '<div style="display:grid;grid-template-columns:50px 1fr 110px 110px;padding:10px 14px;background:var(--surface2);font-size:11px;color:#94a3b8;font-weight:600;">' +
+          '<span>순위</span><span>브랜드</span><span style="text-align:right;">매장당 매출</span><span style="text-align:right;">매장 1개 커버</span>' +
+          '</div>';
+
+  var medals = ['🥇', '🥈', '🥉', '4', '5'];
+  if (ranking.length === 0) {
+    html += '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;">해당 지역에 매출 데이터가 있는 브랜드가 없습니다.</div>';
+  } else {
+    ranking.forEach(function(b, idx) {
+      var bColor = BRAND_COLORS[b] || '#888';
+      var isSelected = b === brand;
+      var popPer = data[b].count > 0 && popTotal > 0 ? Math.round(popTotal / data[b].count) : 0;
+      html += '<div style="display:grid;grid-template-columns:50px 1fr 110px 110px;padding:12px 14px;border-top:1px solid var(--border);align-items:center;' +
+              (isSelected ? 'background:' + bColor + '1f;' : '') + '">';
+      html += '<span style="font-size:' + (idx < 3 ? '18px' : '14px') + ';font-weight:700;">' + medals[idx] + (idx >= 3 ? '위' : '') + '</span>';
+      html += '<span style="font-size:14px;font-weight:' + (isSelected ? '700' : '600') + ';color:' + bColor + ';">' + b + (isSelected ? ' ◀' : '') + ' <span style="font-size:11px;color:#94a3b8;font-weight:400;">(' + data[b].count + '개)</span></span>';
+      html += '<span style="font-size:14px;font-weight:700;text-align:right;color:#fff;font-family:DM Mono,monospace;">' + formatSales(perStoreSales[b]) + '</span>';
+      html += '<span style="font-size:14px;font-weight:700;text-align:right;color:#fff;font-family:DM Mono,monospace;">' + (popPer > 0 ? formatPop(popPer) + '<span style="color:#cbd5e1;font-weight:400;">명</span>' : '-') + '</span>';
+      html += '</div>';
+    });
+  }
+  html += '</div>';
+  html += '<div style="font-size:11px;color:#6b7280;margin-top:8px;">* 매출 없는 브랜드는 순위 제외 · 인구 출처: 통계청 \'24년 주민등록인구</div>';
+
+  html += '</div>';
+  return html;
+}
+
+function renderBrandSalesTab(brand, region, bc) {
+  var isAll = (region === '전체');
+  var storeList = [];
+  allStores.forEach(function(s) {
+    if (s.brand !== brand) return;
+    if (!isAll && s.region !== region) return;
+    storeList.push({ store: s, sales: findSalesData(s.brand, s.name, s.region) });
+  });
+  storeList.sort(function(a, b) {
+    var sa = (a.sales && a.sales.s25 > 0) ? a.sales.s25 : 0;
+    var sb = (b.sales && b.sales.s25 > 0) ? b.sales.s25 : 0;
+    return sb - sa;
+  });
+  var maxS25 = storeList.length > 0 && storeList[0].sales ? storeList[0].sales.s25 : 1;
+
+  var html = '<div style="max-height:460px;overflow-y:auto;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+      '<span style="font-size:14px;font-weight:700;color:' + bc + ';">매장별 매출 (' + storeList.length + '개)</span>' +
+    '</div>';
+
+  storeList.forEach(function(r) {
+    var s25 = (r.sales && r.sales.s25 > 0) ? r.sales.s25 : 0;
+    var s24 = (r.sales && r.sales.s24 > 0) ? r.sales.s24 : 0;
+    var changePct = s24 > 0 ? ((s25 - s24) / s24 * 100).toFixed(1) : '-';
+    var changeColor = '#94a3b8';
+    var changeSign = '';
+    if (changePct !== '-') {
+      changeColor = parseFloat(changePct) >= 0 ? '#34d399' : '#f87171';
+      changeSign = parseFloat(changePct) >= 0 ? '+' : '';
+    }
+    var barW = maxS25 > 0 ? (s25 / maxS25 * 100) : 0;
+    html += '<div style="padding:11px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="selectStore(' + r.store.id + ')">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        '<span style="font-size:14px;color:#fff;font-weight:600;">' + displayName(r.store) + '</span>' +
+        '<span style="font-size:13px;font-weight:700;color:' + changeColor + ';">' + (changePct !== '-' ? changeSign + changePct + '%' : '') + '</span>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">' +
+        '<span style="font-size:12px;color:#cbd5e1;font-family:DM Mono,monospace;">24년 ' + (s24 > 0 ? formatSales(s24) : '-') + '</span>' +
+        '<span style="font-size:15px;font-weight:600;font-family:DM Mono,monospace;color:#fff;">' + (s25 > 0 ? formatSales(s25) : '-') + '</span>' +
+      '</div>' +
+      '<div style="height:5px;background:var(--border);border-radius:3px;margin-top:6px;"><div style="height:100%;width:' + barW + '%;background:' + bc + ';border-radius:3px;"></div></div>' +
+    '</div>';
+  });
+  return html + '</div>';
+}
+
+function renderBrandCriteriaTab(brand, bc) {
+  if (typeof BRAND_CRITERIA === 'undefined' || !BRAND_CRITERIA.brands[brand]) {
+    return '<div style="padding:20px;color:#cbd5e1;">기준 정보 없음</div>';
+  }
+  var c = BRAND_CRITERIA.brands[brand];
+  var html = '<div style="max-height:460px;overflow-y:auto;font-size:13px;color:#e2e8f0;">';
+  // 요약 박스
+  html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;">' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">' +
+      '<span style="color:#cbd5e1;">공식몰 기준</span>' +
+      '<span style="font-family:DM Mono,monospace;font-weight:700;color:#fff;">' + c.officialCount + '개</span>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">' +
+      '<span style="color:#cbd5e1;">− 제외</span>' +
+      '<span style="font-family:DM Mono,monospace;color:#f87171;">' + (c.officialCount - c.count) + '개</span>' +
+    '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:8px;display:flex;justify-content:space-between;">' +
+      '<span style="color:#fff;font-weight:700;">지도 표시</span>' +
+      '<span style="font-family:DM Mono,monospace;font-weight:700;font-size:16px;color:' + bc + ';">' + c.count + '개</span>' +
+    '</div>';
+  html += '</div>';
+  // 출처 + 필터
+  html += '<div style="padding:6px 2px;">' +
+    '<div style="margin-bottom:6px;"><span style="color:#94a3b8;">출처:</span> <strong style="color:#fff;">' + c.source + '</strong></div>' +
+    '<div style="margin-bottom:6px;"><span style="color:#94a3b8;">필터:</span> <strong style="color:#fff;">' + c.filterType + '</strong></div>' +
+    (c.notes ? '<div style="margin-top:8px;padding:8px 10px;background:var(--bg);border-left:3px solid ' + bc + ';border-radius:4px;color:#cbd5e1;font-size:12px;line-height:1.5;">' + c.notes + '</div>' : '') +
+  '</div>';
+  // 제외 리스트
+  if (c.excluded && c.excluded.length > 0) {
+    html += '<div style="margin-top:14px;"><div style="font-size:13px;font-weight:700;color:#f87171;margin-bottom:8px;">제외 매장 (' + c.excluded.length + '건)</div>';
+    c.excluded.forEach(function(e) {
+      var typeBadge = e.type === 'blocklist'
+        ? '<span style="font-size:10px;padding:1px 6px;background:#dc2626;color:#fff;border-radius:3px;margin-right:6px;">개별</span>'
+        : '<span style="font-size:10px;padding:1px 6px;background:#ea580c;color:#fff;border-radius:3px;margin-right:6px;">패턴</span>';
+      html += '<div style="padding:8px 10px;background:var(--surface);border-radius:6px;margin-bottom:6px;font-size:12px;">' +
+        typeBadge + '<strong style="color:#fff;">' + e.name + '</strong>' +
+        '<div style="color:#94a3b8;margin-top:3px;font-size:11px;">→ ' + e.reason + '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+  return html + '</div>';
+}
+
+function renderBrandHistoryTab(brand, bc) {
+  if (typeof BRAND_HISTORY === 'undefined') {
+    return '<div style="padding:20px;color:#cbd5e1;">이력 없음</div>';
+  }
+  var html = '<div style="max-height:460px;overflow-y:auto;font-size:13px;">';
+  var found = false;
+  BRAND_HISTORY.forEach(function(h) {
+    var events = h.events.filter(function(e) { return e.brand === brand; });
+    if (events.length === 0) return;
+    found = true;
+    html += '<div style="margin-bottom:14px;">' +
+      '<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border);">' +
+        h.date + ' <span style="color:#cbd5e1;font-weight:400;font-size:11px;margin-left:6px;">' + (h.summary || '') + '</span>' +
+      '</div>';
+    events.forEach(function(e) {
+      var icon, color, label;
+      if (e.type === 'added') { icon = '🟢'; color = '#34d399'; label = '추가'; }
+      else if (e.type === 'removed') { icon = '🔴'; color = '#f87171'; label = '삭제'; }
+      else if (e.type === 'blocked') { icon = '⊘'; color = '#fbbf24'; label = '블랙리스트'; }
+      else { icon = '•'; color = '#cbd5e1'; label = e.type; }
+      html += '<div style="padding:8px 10px;background:var(--surface);border-radius:6px;margin-bottom:6px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+          '<span style="color:#fff;font-weight:600;">' + icon + ' ' + e.name + '</span>' +
+          '<span style="font-size:11px;color:' + color + ';font-weight:700;">' + label + '</span>' +
+        '</div>' +
+        (e.reason ? '<div style="font-size:11px;color:#94a3b8;margin-top:3px;">' + e.reason + '</div>' : '') +
+      '</div>';
+    });
+    html += '</div>';
+  });
+  if (!found) html = '<div style="padding:20px 10px;color:#94a3b8;text-align:center;">이 브랜드에 대한 이력이 없습니다</div>';
+  return html + '</div>';
+}
+
+function closeRegionDashboard() {
+  document.getElementById('regionDashboard').classList.remove('visible');
+  document.getElementById('btnSales').classList.remove('active');
+  setTimeout(relayoutMap, 50);
+}
+
+function toggleSalesDashboard() {
+  var el = document.getElementById('regionDashboard');
+  var isVisible = el.classList.contains('visible');
+  if (isVisible) {
+    closeRegionDashboard();
+  } else {
+    showRegionDashboard(activeFilter || '전체');
+    document.getElementById('btnSales').classList.add('active');
+    setTimeout(relayoutMap, 50);
+  }
+}
+
+function relayoutMap() {
+  if (mapEngine === 'kakao' && mapObj && mapObj.relayout) {
+    mapObj.relayout();
+  } else if (mapEngine === 'leaflet' && mapObj && mapObj.invalidateSize) {
+    mapObj.invalidateSize();
+  }
+  // 패널 토글 후 현재 지역으로 다시 fit
+  if (activeFilter && activeFilter !== '전체') {
+    setFilter(activeFilter);
+  }
+}
+
+function closeCompare() {
+  document.getElementById('comparePanel').classList.remove('visible');
+}
+
+// ══════════════════════════════════════════
+// 반경 슬라이더
+// ══════════════════════════════════════════
+function updateRadius(val) {
+  currentRadius = parseInt(val, 10);
+  document.getElementById('radiusVal').textContent = currentRadius + 'km';
+  if (activeStoreId === null) return;
+  var store = allStores.find(function(s) { return s.id === activeStoreId; });
+  if (!store) return;
+
+  // 반경 원만 다시 그리기 (줌/센터 유지)
+  removeRadiusCircle();
+  if (mapEngine === 'kakao' && mapObj) {
+    radiusCircle = new kakao.maps.Circle({
+      center: new kakao.maps.LatLng(store.lat, store.lng),
+      radius: currentRadius * 1000,
+      strokeWeight: 2, strokeColor: '#e8463a', strokeOpacity: 0.6,
+      strokeStyle: 'dash', fillColor: '#e8463a', fillOpacity: 0.08, map: mapObj
+    });
+  } else if (mapEngine === 'leaflet' && mapObj) {
+    radiusCircle = L.circle([store.lat, store.lng], {
+      radius: currentRadius * 1000, color: '#e8463a', weight: 2,
+      opacity: 0.6, dashArray: '8,6', fillColor: '#e8463a', fillOpacity: 0.08
+    }).addTo(mapObj);
+  }
+
+  // 경쟁사 목록 + 바차트만 갱신
+  var nearby = findNearbyCompetitors(store, currentRadius);
+  var mySales = findSalesData(store.brand, store.name, store.region);
+  var compHtml = '';
+  if (nearby.length > 0) {
+    var barData = [];
+    if (mySales) barData.push({ brand: store.brand, name: store.name, sales: mySales.s25, color: BRAND_COLORS[store.brand] });
+    nearby.forEach(function(n) {
+      if (n.sales && n.sales.s25 > 0) barData.push({ brand: n.store.brand, name: n.store.name, sales: n.sales.s25, color: BRAND_COLORS[n.store.brand], dist: n.dist });
+    });
+    barData.sort(function(a, b) { return b.sales - a.sales; });
+    var maxSales = barData.length > 0 ? barData[0].sales : 1;
+    var barHtml = '';
+    if (barData.length > 1) {
+      barHtml = '<div class="panel-section"><div class="panel-section-title">반경 ' + currentRadius + 'km 매출 비교</div><div class="bar-chart">';
+      barData.slice(0, 8).forEach(function(d) {
+        var pct = Math.max(5, (d.sales / maxSales) * 100);
+        barHtml += '<div class="bar-row"><div class="bar-label">' + d.brand + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + d.color + ';"><span class="bar-value">' + formatSales(d.sales) + '</span></div></div></div>';
+      });
+      barHtml += '</div></div>';
+    }
+    compHtml = '<div class="panel-section"><div class="panel-section-title">근접 경쟁사 (' + nearby.length + ')</div>';
+    nearby.slice(0, 10).forEach(function(n) {
+      var distStr = n.dist < 1 ? Math.round(n.dist * 1000) + 'm' : n.dist.toFixed(1) + 'km';
+      var salesStr = n.sales ? formatSales(n.sales.s25) : '';
+      compHtml += '<div class="competitor-row"><div class="brand-dot" style="background:' + (BRAND_COLORS[n.store.brand] || '#888') + ';"></div><div class="comp-info"><div class="comp-name">' + n.store.brand + ' ' + displayName(n.store) + '</div><div class="comp-dist">' + distStr + '</div></div>' + (salesStr ? '<div class="comp-sales">' + salesStr + '</div>' : '') + '</div>';
+    });
+    compHtml += '</div>';
+    compHtml = barHtml + compHtml;
+  } else {
+    compHtml = '<div class="panel-section"><div class="panel-section-title">근접 경쟁사</div><div style="font-size:11px;color:var(--text-dim);text-align:center;padding:12px;">반경 ' + currentRadius + 'km 내 경쟁사 없음</div></div>';
+  }
+  document.getElementById('panelCompetitorSection').innerHTML = compHtml;
+}
+
+// ══════════════════════════════════════════
+// 지역별 매출 성장률 지도
+// ══════════════════════════════════════════
+function clearHeatmap() {
+  heatmapCircles.forEach(function(c) {
+    if (mapEngine === 'kakao') c.setMap(null);
+    else if (mapEngine === 'leaflet' && mapObj) mapObj.removeLayer(c);
+  });
+  heatmapCircles = [];
+  var tip = document.getElementById('growth-tooltip');
+  if (tip) tip.style.display = 'none';
+}
+
+function growthColor(pct, hasData) {
+  if (!hasData) return '#4b5563';
+  if (pct >= 10) return '#6ee7b7';    // 파스텔 진녹 (+10% 이상)
+  if (pct >= 5)  return '#a7f3d0';    // 파스텔 연녹 (+5 ~ +10%)
+  if (pct >= 0)  return '#bfdbfe';    // 파스텔 파랑 (0 ~ +5%)
+  if (pct >= -5) return '#fde68a';    // 파스텔 노랑 (-5 ~ 0%)
+  if (pct >= -10) return '#fed7aa';   // 파스텔 주황 (-10 ~ -5%)
+  return '#fca5a5';                    // 파스텔 빨강 (-10% 미만)
+}
+
+// 성장률 기간 선택 (전역)
+var growthPeriod = 'yoy_full'; // yoy_full | rolling12m | recent3m | recent1m
+
+// 'YYYY-MM' 문자열 ±N개월 계산
+function shiftMonth(ym, delta) {
+  var p = ym.split('-');
+  var y = parseInt(p[0], 10), m = parseInt(p[1], 10);
+  var total = y * 12 + (m - 1) + delta;
+  return Math.floor(total / 12) + '-' + String(total % 12 + 1).padStart(2, '0');
+}
+
+// 매장 monthly에서 [from, to] 범위 매출 합산 (양 끝 포함)
+function sumMonthly(monthly, from, to) {
+  if (!monthly) return 0;
+  var sum = 0;
+  for (var i = 0; i < monthly.length; i++) {
+    var m = monthly[i];
+    if (m.m >= from && m.m <= to) sum += (m.s || 0);
+  }
+  return sum;
+}
+
+// 기간별 (prev, curr) 산출 — 매장 단위 sales에서
+function aggregatePeriod(sales) {
+  if (!sales) return { prev: 0, curr: 0 };
+  if (growthPeriod === 'yoy_full') {
+    return { prev: sales.s24 || 0, curr: sales.s25 || 0 };
+  }
+  // 가장 최신 월 (전역 SALES_META 또는 sales.monthly에서)
+  var latest = (typeof SALES_META !== 'undefined' && SALES_META.latestMonth) ? SALES_META.latestMonth : null;
+  if (!latest && sales.monthly && sales.monthly.length) {
+    latest = sales.monthly.map(function(m) { return m.m; }).sort().pop();
+  }
+  if (!latest) return { prev: 0, curr: 0 };
+
+  if (growthPeriod === 'rolling12m') {
+    // 최근 12개월 vs 직전 12개월
+    var c1 = shiftMonth(latest, -11), c2 = latest;
+    var p1 = shiftMonth(latest, -23), p2 = shiftMonth(latest, -12);
+    return { prev: sumMonthly(sales.monthly, p1, p2), curr: sumMonthly(sales.monthly, c1, c2) };
+  }
+  if (growthPeriod === 'recent3m') {
+    var cc1 = shiftMonth(latest, -2), cc2 = latest;
+    var pp1 = shiftMonth(latest, -14), pp2 = shiftMonth(latest, -12);
+    return { prev: sumMonthly(sales.monthly, pp1, pp2), curr: sumMonthly(sales.monthly, cc1, cc2) };
+  }
+  if (growthPeriod === 'recent1m') {
+    var p1m = shiftMonth(latest, -12);
+    return { prev: sumMonthly(sales.monthly, p1m, p1m), curr: sumMonthly(sales.monthly, latest, latest) };
+  }
+  return { prev: sales.s24 || 0, curr: sales.s25 || 0 };
+}
+
+function setGrowthPeriod(p) {
+  growthPeriod = p;
+  // 버튼 활성화 토글
+  document.querySelectorAll('.period-btn').forEach(function(b) {
+    var on = b.dataset.period === p;
+    b.classList.toggle('active', on);
+    b.style.background = on ? '#3b82f6' : 'transparent';
+    b.style.color = on ? '#fff' : '#cbd5e1';
+  });
+  // 라벨 업데이트
+  var latest = (typeof SALES_META !== 'undefined' && SALES_META.latestMonth) ? SALES_META.latestMonth : '?';
+  var labels = {
+    yoy_full: '25년 전체 vs 24년 전체',
+    rolling12m: '최근 12개월 vs 직전 12개월',
+    recent3m: latest + ' 기준 최근 3개월 vs 1년 전 동기간',
+    recent1m: latest + ' vs 1년 전 동월'
+  };
+  var lbl = document.getElementById('periodLabel');
+  if (lbl) lbl.textContent = labels[p] || '';
+  // 활성 상태면 다시 그리기
+  if (heatmapActive) { clearHeatmap(); drawHeatmap(); }
+}
+
+function drawHeatmap() {
+  if (typeof DISTRICT_BOUNDARIES === 'undefined') return;
+
+  // 1) 지역별 매출 집계 (선택 기간 기준, 전체 + 브랜드별)
+  var regionSales = {};
+  allStores.forEach(function(s) {
+    if (!activeBrands[s.brand]) return;
+    if (!s.region) return;
+    var sales = findSalesData(s.brand, s.name, s.region);
+    if (!sales) return;
+    var p = aggregatePeriod(sales);
+    if (!regionSales[s.region]) regionSales[s.region] = { s24: 0, s25: 0, count: 0, byBrand: {} };
+    var r = regionSales[s.region];
+    if (p.prev > 0) r.s24 += p.prev;
+    if (p.curr > 0) r.s25 += p.curr;
+    r.count++;
+    if (!r.byBrand[s.brand]) r.byBrand[s.brand] = { s24: 0, s25: 0 };
+    if (p.prev > 0) r.byBrand[s.brand].s24 += p.prev;
+    if (p.curr > 0) r.byBrand[s.brand].s25 += p.curr;
+  });
+
+  // 호버 툴팁 생성 (지도 위에 띄움)
+  var tip = document.getElementById('growth-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'growth-tooltip';
+    tip.style.cssText = 'position:absolute;z-index:500;pointer-events:none;display:none;padding:8px 12px;background:rgba(15,20,30,0.95);border:1px solid #4b5563;border-radius:6px;color:#fff;font-size:12px;line-height:1.5;font-family:Noto Sans KR,sans-serif;box-shadow:0 4px 12px rgba(0,0,0,0.4);white-space:nowrap;';
+    document.getElementById('map').appendChild(tip);
+  }
+
+  var brandOrder = ['일룸', '한샘', '리바트', '까사미아', '에몬스'];
+  function buildTipHtml(regionName, rs, hasData, pct) {
+    var pctStr = hasData ? (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%' : '데이터 없음';
+    var pctColor = !hasData ? '#9ca3af' : (pct >= 0 ? '#34d399' : '#f87171');
+    var html = '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + regionName + '</div>';
+    html += '<div style="display:flex;justify-content:space-between;gap:14px;align-items:center;">' +
+      '<span style="color:#cbd5e1;font-size:11px;">전체</span>' +
+      '<strong style="color:' + pctColor + ';font-family:DM Mono,monospace;">' + pctStr + '</strong>' +
+    '</div>';
+    if (hasData) {
+      var prevLabel = '전기', currLabel = '당기';
+      if (growthPeriod === 'yoy_full') { prevLabel = '24년'; currLabel = '25년'; }
+      else if (growthPeriod === 'rolling12m') { prevLabel = '직전12개월'; currLabel = '최근12개월'; }
+      else if (growthPeriod === 'recent3m') { prevLabel = '1년전 3개월'; currLabel = '최근 3개월'; }
+      else if (growthPeriod === 'recent1m') { prevLabel = '1년전 동월'; currLabel = '최신월'; }
+      html += '<div style="color:#94a3b8;font-size:10px;margin-top:2px;">' + prevLabel + ' ' + formatSales(rs.s24) + ' → ' + currLabel + ' ' + formatSales(rs.s25) + '</div>';
+      // 브랜드별 분해
+      var brandRows = '';
+      brandOrder.forEach(function(b) {
+        if (!activeBrands[b]) return;
+        var bd = rs.byBrand && rs.byBrand[b];
+        if (!bd) return;
+        var bHasData = bd.s24 > 0 && bd.s25 > 0;
+        var bPct = bHasData ? ((bd.s25 - bd.s24) / bd.s24 * 100) : null;
+        var bPctStr = bHasData ? (bPct >= 0 ? '+' : '') + bPct.toFixed(1) + '%' : '-';
+        var bPctColor = !bHasData ? '#9ca3af' : (bPct >= 0 ? '#34d399' : '#f87171');
+        var bColor = BRAND_COLORS[b] || '#888';
+        brandRows += '<div style="display:flex;justify-content:space-between;gap:14px;align-items:center;font-size:11px;margin-top:3px;">' +
+          '<span style="color:' + bColor + ';font-weight:600;">' + b + '</span>' +
+          '<span style="color:' + bPctColor + ';font-family:DM Mono,monospace;font-weight:600;">' + bPctStr + '</span>' +
+        '</div>';
+      });
+      if (brandRows) {
+        html += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #4b5563;">' + brandRows + '</div>';
+      }
+    }
+    return html;
+  }
+
+  // 2) 각 시도 경계 폴리곤에 성장률 색상 칠하기 + 호버 이벤트
+  // 광역시(도 안에 포함되는 지역)를 마지막에 그려서 위로 올리기
+  var metroCities = { '서울':1, '부산':1, '대구':1, '인천':1, '광주':1, '대전':1, '울산':1, '세종':1 };
+  var sortedDistricts = DISTRICT_BOUNDARIES.slice().sort(function(a, b) {
+    var aIsMetro = metroCities[a.sido] ? 1 : 0;
+    var bIsMetro = metroCities[b.sido] ? 1 : 0;
+    return aIsMetro - bIsMetro; // 도 먼저, 광역시 나중
+  });
+  sortedDistricts.forEach(function(d) {
+    var rs = regionSales[d.sido];
+    var hasData = rs && rs.s24 > 0 && rs.s25 > 0;
+    var pct = hasData ? ((rs.s25 - rs.s24) / rs.s24 * 100) : 0;
+    var color = growthColor(pct, hasData);
+    var tipHtml = buildTipHtml(d.sido, rs, hasData, pct);
+    var polys = d.type === 'MultiPolygon' ? d.coords : [d.coords];
+    polys.forEach(function(poly) {
+      var outer = poly[0];
+      if (!outer || outer.length < 3) return;
+      var isMetro = !!metroCities[d.sido];
+      var baseFill = 0.6;
+      var hoverFill = 0.85;
+      if (mapEngine === 'kakao' && mapObj) {
+        var path = outer.map(function(c) { return new kakao.maps.LatLng(c[1], c[0]); });
+        var polygon = new kakao.maps.Polygon({
+          map: mapObj, path: path,
+          strokeWeight: isMetro ? 2 : 1, strokeColor: color, strokeOpacity: 0.8,
+          fillColor: color, fillOpacity: baseFill,
+          zIndex: isMetro ? 20 : 10
+        });
+        kakao.maps.event.addListener(polygon, 'mouseover', function(ev) {
+          polygon.setOptions({ fillOpacity: hoverFill });
+          tip.innerHTML = tipHtml;
+          tip.style.display = 'block';
+        });
+        kakao.maps.event.addListener(polygon, 'mousemove', function(ev) {
+          var proj = mapObj.getProjection();
+          var pt = proj.containerPointFromCoords(ev.latLng);
+          tip.style.left = (pt.x + 14) + 'px';
+          tip.style.top = (pt.y + 14) + 'px';
+        });
+        kakao.maps.event.addListener(polygon, 'mouseout', function() {
+          polygon.setOptions({ fillOpacity: baseFill });
+          tip.style.display = 'none';
+        });
+        heatmapCircles.push(polygon);
+      } else if (mapEngine === 'leaflet' && mapObj) {
+        var latlngs = outer.map(function(c) { return [c[1], c[0]]; });
+        var polygon = L.polygon(latlngs, {
+          color: color, weight: isMetro ? 2 : 1, opacity: 0.8,
+          fillColor: color, fillOpacity: baseFill
+        }).addTo(mapObj);
+        if (isMetro && polygon.bringToFront) polygon.bringToFront();
+        polygon.on('mouseover', function(ev) {
+          polygon.setStyle({ fillOpacity: hoverFill });
+          tip.innerHTML = tipHtml;
+          tip.style.display = 'block';
+        });
+        polygon.on('mousemove', function(ev) {
+          var pt = mapObj.latLngToContainerPoint(ev.latlng);
+          tip.style.left = (pt.x + 14) + 'px';
+          tip.style.top = (pt.y + 14) + 'px';
+        });
+        polygon.on('mouseout', function() {
+          polygon.setStyle({ fillOpacity: baseFill });
+          tip.style.display = 'none';
+        });
+        heatmapCircles.push(polygon);
+      }
+    });
+  });
+}
+
+function toggleHeatmap() {
+  heatmapActive = !heatmapActive;
+  document.getElementById('btnHeatmap').classList.toggle('active', heatmapActive);
+  document.getElementById('heatmapLegend').classList.toggle('visible', heatmapActive);
+
+  if (!heatmapActive) {
+    clearHeatmap();
+    return;
+  }
+  drawHeatmap();
+}
+
+// ══════════════════════════════════════════
+// 공백 분석
+// ══════════════════════════════════════════
+var gapActive = false;
+var gapCircles = [];
+var gapUncovered = [];
+var currentView = 'map';
+var gapMode = 'national';
+var coverageRadius = 15; // km
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.header-tab').forEach(function(t) {
+    t.classList.toggle('active', t.textContent.indexOf(view === 'map' ? '유통망' : '공백') !== -1);
+  });
+
+  var mapSidebar = document.querySelector('.sidebar:not(#gapSidebar)');
+  var gapSidebarEl = document.getElementById('gapSidebar');
+  var toolbar = document.querySelector('.map-toolbar');
+
+  if (view === 'gap') {
+    mapSidebar.style.display = 'none';
+    gapSidebarEl.style.display = 'flex';
+    toolbar.style.display = 'none';
+    closePanel();
+    closeCompare();
+    closeRegionDashboard();
+    // 성장률 지도가 켜져 있으면 해제 (공백분석과 다른 컨텍스트)
+    if (heatmapActive) {
+      heatmapActive = false;
+      clearHeatmap();
+      document.getElementById('btnHeatmap').classList.remove('active');
+      document.getElementById('heatmapLegend').classList.remove('visible');
+    }
+    gapActive = true;
+    runCoverageAnalysis();
+  } else {
+    mapSidebar.style.display = 'flex';
+    gapSidebarEl.style.display = 'none';
+    toolbar.style.display = 'flex';
+    gapActive = false;
+    clearGapOverlays();
+    updateMarkers();
+  }
+}
+
+function switchGapMode(mode) {
+  gapMode = mode;
+  document.querySelectorAll('.gap-sub-tab').forEach(function(t) {
+    t.classList.toggle('active', t.textContent.indexOf(mode === 'national' ? '전국' : '수도권') !== -1);
+  });
+  document.getElementById('gapFilterNational').style.display = mode === 'national' ? '' : 'none';
+  document.getElementById('gapFilterMetro').style.display = mode === 'metro' ? '' : 'none';
+  // 모드 전환 시 기본 반경 설정
+  if (mode === 'national') coverageRadius = 15;
+  else coverageRadius = 1;
+  if (gapActive) runCoverageAnalysis();
+}
+
+function setCoverageRadius(r) {
+  coverageRadius = r;
+  var btnClass = gapMode === 'national' ? '.gap-radius-btn' : '.gap-radius-btn-metro';
+  document.querySelectorAll(btnClass).forEach(function(b) {
+    b.classList.toggle('active', parseInt(b.textContent) === r);
+  });
+  if (gapActive) runCoverageAnalysis();
+}
+
+function clearGapOverlays() {
+  gapCircles.forEach(function(c) {
+    if (mapEngine === 'kakao') c.setMap(null);
+    else if (mapEngine === 'leaflet' && mapObj) mapObj.removeLayer(c);
+  });
+  gapCircles = [];
+}
+
+function runCoverageAnalysis() {
+  clearGapOverlays();
+
+  var metroRegions = ['서울','경기','인천'];
+  var isMetro = gapMode === 'metro';
+
+  // 대상 매장 필터링
+  var iloomStores = allStores.filter(function(s) {
+    if (s.brand !== '일룸') return false;
+    return isMetro ? metroRegions.indexOf(s.region) !== -1 : true;
+  });
+  var competitors = allStores.filter(function(s) {
+    if (s.brand === '일룸') return false;
+    return isMetro ? metroRegions.indexOf(s.region) !== -1 : true;
+  });
+
+  // 각 경쟁사 매장 → 가장 가까운 일룸 거리 계산
+  gapUncovered = [];
+  competitors.forEach(function(comp) {
+    var minDist = Infinity;
+    var nearest = null;
+    iloomStores.forEach(function(il) {
+      var d = calcDistance(comp.lat, comp.lng, il.lat, il.lng);
+      if (d < minDist) { minDist = d; nearest = il; }
+    });
+    comp._iloomDist = minDist;
+    comp._nearestIloom = nearest;
+    if (minDist > coverageRadius) {
+      gapUncovered.push(comp);
+    }
+  });
+
+  // 거리순 정렬 (먼 곳부터)
+  gapUncovered.sort(function(a, b) { return b._iloomDist - a._iloomDist; });
+
+  // 지역별 그룹핑
+  var regionMap = {};
+  gapUncovered.forEach(function(s) {
+    var r = s.region || '기타';
+    if (!regionMap[r]) regionMap[r] = [];
+    regionMap[r].push(s);
+  });
+  var regionList = Object.keys(regionMap).sort(function(a, b) {
+    return regionMap[b].length - regionMap[a].length;
+  });
+
+  // 지도에 표시: 일룸 커버리지 원(초록) + 커버리지 밖 경쟁사 마커(빨강)
+  // 일룸 커버리지 원
+  iloomStores.forEach(function(il) {
+    if (mapEngine === 'kakao' && mapObj) {
+      var circle = new kakao.maps.Circle({
+        center: new kakao.maps.LatLng(il.lat, il.lng),
+        radius: coverageRadius * 1000,
+        strokeWeight: 1, strokeColor: '#34d399', strokeOpacity: 0.4, strokeStyle: 'solid',
+        fillColor: '#34d399', fillOpacity: 0.08, map: mapObj
+      });
+      gapCircles.push(circle);
+    } else if (mapEngine === 'leaflet' && mapObj) {
+      var circle = L.circle([il.lat, il.lng], {
+        radius: coverageRadius * 1000,
+        color: '#34d399', weight: 1, opacity: 0.4,
+        fillColor: '#34d399', fillOpacity: 0.08
+      }).addTo(mapObj);
+      gapCircles.push(circle);
+    }
+  });
+
+  // 마커 표시: 일룸 + 커버리지 밖 경쟁사만
+  var uncoveredIds = {};
+  gapUncovered.forEach(function(s) { uncoveredIds[s.id] = true; });
+
+  allStores.forEach(function(store) {
+    if (!store.marker) return;
+    var inScope = isMetro ? metroRegions.indexOf(store.region) !== -1 : true;
+    var show = inScope && (store.brand === '일룸' || uncoveredIds[store.id]);
+    if (mapEngine === 'kakao') store.marker.setMap(show ? mapObj : null);
+    else if (mapEngine === 'leaflet') {
+      if (show) { if (!mapObj.hasLayer(store.marker)) store.marker.addTo(mapObj); }
+      else mapObj.removeLayer(store.marker);
+    }
+  });
+
+  // 수도권이면 줌
+  if (isMetro) {
+    if (mapEngine === 'kakao' && mapObj) {
+      mapObj.setCenter(new kakao.maps.LatLng(37.5, 127.0));
+      mapObj.setLevel(9);
+    } else if (mapEngine === 'leaflet' && mapObj) {
+      mapObj.setView([37.5, 127.0], 10, { animate: true });
+    }
+  }
+
+  // 요약 카드
+  var coveredCount = competitors.length - gapUncovered.length;
+  var covPct = competitors.length > 0 ? Math.round(coveredCount / competitors.length * 100) : 0;
+  var summaryHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+    '<span style="color:var(--text);">커버리지 <strong style="color:#34d399;">' + covPct + '%</strong></span>' +
+    '<span style="font-size:11px;color:var(--text-dim);">' + coveredCount + '/' + competitors.length + '개 매장</span>' +
+  '</div>' +
+  '<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;">' +
+    '<div style="width:' + covPct + '%;height:100%;background:#34d399;border-radius:3px;"></div>' +
+  '</div>' +
+  '<div style="margin-top:8px;font-size:12px;">' +
+    '<span style="color:#f87171;font-weight:600;">커버리지 밖 ' + gapUncovered.length + '개</span> 경쟁사 매장' +
+  '</div>';
+  document.getElementById('gapSummary').innerHTML = summaryHtml;
+
+  // 출점 우선순위 스코어 계산: 경쟁사 수 × √(지역 인구/만명)
+  //   - 경쟁사 많고 인구 많은 지역 = 시장 크고 경쟁만 존재하는 공백
+  //   - 제곱근으로 인구 격차(경기 1362만 vs 전남 181만) 완충
+  var regionScores = {};
+  regionList.forEach(function(region) {
+    var stores = regionMap[region];
+    var pop = (typeof POPULATION_DATA !== 'undefined' && POPULATION_DATA[region]) ? POPULATION_DATA[region].pop : 0;
+    var popMan = pop / 10000;
+    var score = stores.length * Math.sqrt(popMan);
+    regionScores[region] = { score: Math.round(score), pop: pop, popMan: popMan };
+  });
+  // 스코어 내림차순 재정렬
+  regionList.sort(function(a, b) { return regionScores[b].score - regionScores[a].score; });
+  var topScore = regionList.length > 0 ? regionScores[regionList[0]].score : 0;
+
+  // 결과 리스트: 지역별 그룹 (스코어 정렬)
+  var html = '';
+  regionList.forEach(function(region, idx) {
+    var stores = regionMap[region];
+    var scoreData = regionScores[region];
+    var brandCount = {};
+    stores.forEach(function(s) {
+      brandCount[s.brand] = (brandCount[s.brand] || 0) + 1;
+    });
+    var isTop3 = idx < 3 && scoreData.score > 0;
+    var rankBadge = isTop3
+      ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#fbbf24;color:#000;font-weight:700;margin-right:6px;">🔥 집중 후보 ' + (idx + 1) + '위</span>'
+      : '';
+    var popStr = scoreData.popMan >= 100 ? (scoreData.popMan / 100).toFixed(1) + '백만' : Math.round(scoreData.popMan) + '만';
+
+    html += '<div style="padding:10px 16px;border-bottom:1px solid var(--border);">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+        '<span style="font-weight:700;font-size:13px;">' + rankBadge + region + '</span>' +
+        '<span style="font-size:11px;color:#f87171;font-weight:600;">' + stores.length + '개 매장</span>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11px;">' +
+        '<span style="color:#cbd5e1;">인구 <strong style="color:#fff;font-family:DM Mono,monospace;">' + popStr + '</strong></span>' +
+        '<span style="color:#cbd5e1;">출점 우선순위 <strong style="color:#fbbf24;font-family:DM Mono,monospace;">' + scoreData.score + '점</strong></span>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' +
+        Object.keys(brandCount).map(function(b) {
+          return '<span style="font-size:10px;padding:2px 6px;border-radius:3px;color:#fff;background:' + (BRAND_COLORS[b]||'#888') + ';">' + b + ' ' + brandCount[b] + '</span>';
+        }).join('') +
+      '</div>';
+
+    stores.forEach(function(s) {
+      html += '<div class="gap-zone" onclick="focusStore(' + s.id + ')" style="padding:8px 10px;margin-bottom:4px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+          '<span><span style="color:' + (BRAND_COLORS[s.brand]||'#888') + ';font-weight:600;">' + s.brand + '</span> ' + displayName(s) + '</span>' +
+          '<span style="font-size:10px;color:#f87171;font-family:DM Mono,monospace;">' + s._iloomDist.toFixed(1) + 'km</span>' +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">가장 가까운 일룸: ' + (s._nearestIloom ? displayName(s._nearestIloom) : '-') + '</div>' +
+      '</div>';
+    });
+
+    html += '</div>';
+  });
+
+  if (gapUncovered.length === 0) {
+    html = '<div style="text-align:center;color:var(--text-dim);padding:32px 20px;">커버리지 ' + coverageRadius + 'km 내 모든 경쟁사가 포함됩니다</div>';
+  }
+
+  document.getElementById('gapResults').innerHTML = html;
+}
+
+function focusStore(storeId) {
+  var store = allStores.find(function(s) { return s.id === storeId; });
+  if (!store) return;
+  if (mapEngine === 'kakao' && mapObj) {
+    mapObj.setCenter(new kakao.maps.LatLng(store.lat, store.lng));
+    mapObj.setLevel(5);
+  } else if (mapEngine === 'leaflet' && mapObj) {
+    mapObj.setView([store.lat, store.lng], 14, { animate: true });
+  }
+}
+
+// ══════════════════════════════════════════
+// 출고지 분석 (데이터 연동 대기)
+// ══════════════════════════════════════════
+var shipmentActive = false;
+function toggleShipment() {
+  shipmentActive = !shipmentActive;
+  document.getElementById('btnShipment').classList.toggle('active', shipmentActive);
+  if (shipmentActive) {
+    alert('출고지 데이터가 아직 연동되지 않았습니다.\n엑셀 파일을 제공해주시면 활성화됩니다.');
+    shipmentActive = false;
+    document.getElementById('btnShipment').classList.remove('active');
+  }
+}
+
+</script>
+</body>
+</html>

@@ -123,6 +123,16 @@ var MARKER_TO_SALES = {
   }
 };
 
+// 폐점 매장 목록
+// - 마커 매핑(findSalesData)에서 제외됨 → 마커 클릭 시 데이터 없음으로 표시
+// - renderMarketAnalysis에서는 제외하지 않음 → 상권 매출 규모 집계에 포함
+// 형식: CLOSED_STORES[brand][salesStoreName] = 'YYYY.MM' (폐점 연월)
+var CLOSED_STORES = {
+  '일룸':   { '현대중동': '2026.05' },
+  '까사미아': { '대구북구': '2026.05' },
+  '에몬스':  { '동해점':   '2026.05' }
+};
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { MARKER_TO_SALES };
+  module.exports = { MARKER_TO_SALES, CLOSED_STORES };
 }
