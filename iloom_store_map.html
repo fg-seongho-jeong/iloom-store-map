@@ -536,7 +536,7 @@ var STORES_RAW = [
   { name: "수원광교3", addr: "경기도 용인시 기흥구 흥덕1로 5-13", lat: 37.2693991112162, lng: 127.065082946408 },
   { name: "대구3", addr: "대구광역시 북구 유통단지로 126", lat: 35.909503885045, lng: 128.615582688087 },
   { name: "컬렉티브 노원", addr: "서울특별시 노원구 한글비석로 212", lat: 37.6466191682977, lng: 127.076833609928 },
-  { name: "현대목동", addr: "서울 양천구 목동동로 257", lat: 37.5273217750941, lng: 126.874619136454 },
+  { name: "현대목동점", addr: "서울 양천구 목동동로 257", lat: 37.5273217750941, lng: 126.874619136454 },
   { name: "강동아이파크", addr: "서울특별시 강동구 고덕비즈밸리로 51", lat: 37.5666602103625, lng: 127.157332910007 },
   { name: "분당서현", addr: "경기도 성남시 분당구 새마을로51번길 1", lat: 37.3836968211799, lng: 127.135806570253 },
   { name: "부산센텀4", addr: "부산광역시 해운대구 센텀동로 26", lat: 35.1720424005824, lng: 129.132621594428 },
@@ -1099,9 +1099,10 @@ function findSalesData(brand, storeName, storeRegion) {
       target.forEach(function(t) {
         var f = SALES_DATA.find(function(d) { return d.brand === brand && d.store === t; });
         if (!f) return;
-        if (!merged) merged = { brand: brand, store: storeName, region: f.region, area: f.area, s24: 0, s25: 0, monthly: [] };
+        if (!merged) merged = { brand: brand, store: storeName, region: f.region, area: f.area, s24: 0, s25: 0, monthly: [], parts: [] };
         merged.s24 += (f.s24 || 0); merged.s25 += (f.s25 || 0);
         if (f.monthly) merged.monthly = merged.monthly.concat(f.monthly);
+        merged.parts.push({ store: t, s25: (f.s25 || 0), s26: (f.monthly || []).filter(function(x){ return String(x.m).indexOf('2026') === 0; }).reduce(function(a,c){ return a + c.s; }, 0) });
       });
       if (merged) return merged;
     } else {
@@ -1207,12 +1208,24 @@ function selectStore(id) {
     var rankChange = mySales.r24 - mySales.r25;
     var rankArrow = rankChange > 0 ? '&#9650; ' + rankChange : (rankChange < 0 ? '&#9660; ' + Math.abs(rankChange) : '-');
     var rankColor = rankChange > 0 ? '#34d399' : (rankChange < 0 ? '#f87171' : 'var(--text-dim)');
+    // 전국 순위: 합산(merged) 매장은 순위가 없으므로 숨김 (undefined위 방지)
+    var rankRow = (typeof mySales.r25 === 'number' && !isNaN(mySales.r25))
+      ? '<div class="sales-row"><span class="sales-label">전국 순위</span><span class="rank-badge" style="color:' + rankColor + ';">' + mySales.r25 + '위 <span style="font-size:10px;">' + rankArrow + '</span></span></div>'
+      : '';
+    // 팝업 매출 별도 표시 (예: 울산5에 합산된 롯데울산(팝업))
+    var popupRow = '';
+    if (mySales.parts) {
+      mySales.parts.filter(function(p){ return p.store.indexOf('팝업') !== -1; }).forEach(function(p){
+        var pv = p.s26 > 0 ? formatSales(p.s26) + ' <span style="font-size:9px;">(26년)</span>' : formatSales(p.s25);
+        popupRow += '<div class="sales-row" style="padding-left:10px;"><span class="sales-label" style="font-size:10px;">└ ' + p.store + ' 포함</span><span class="sales-value" style="font-size:11px;color:var(--text-muted);">' + pv + '</span></div>';
+      });
+    }
     salesHtml = '<div class="panel-section"><div class="panel-section-title">매출 현황</div>' +
       '<div class="sales-card">' +
       '<div class="sales-row"><span class="sales-label">2025 연누계</span><span class="sales-value">' + formatSales(mySales.s25) + '</span></div>' +
       '<div class="sales-row"><span class="sales-label">2024 연누계</span><span class="sales-value" style="color:var(--text-muted);font-size:12px;">' + formatSales(mySales.s24) + '</span></div>' +
       '<div class="sales-row"><span class="sales-label">전년 대비</span><span class="sales-change ' + changeClass + '">' + changeSign + changePct + '%</span></div>' +
-      '<div class="sales-row"><span class="sales-label">전국 순위</span><span class="rank-badge" style="color:' + rankColor + ';">' + mySales.r25 + '위 <span style="font-size:10px;">' + rankArrow + '</span></span></div>' +
+      rankRow + popupRow +
       '</div></div>';
   }
   document.getElementById('panelSalesSection').innerHTML = salesHtml;
