@@ -57,7 +57,14 @@ async function main() {
   //    - 마테라소: 까사미아의 매트리스 전문 브랜드 (가구 매장 분석 아님)
   //    - 한샘 마포/방배: 본사 사옥/B2B 채널 추정 (마커 없음, 매장당 매출 효율 왜곡 방지)
   const SALES_BLOCKLIST = {
-    '한샘': new Set(['마포', '마포직매장', '마포표준가구', '방배', '방배직매장'])
+    '한샘': new Set(['마포', '마포직매장', '마포표준가구', '방배', '방배직매장',
+      // 2026-07 검토: 채널성(팝업/위탁/표준매장/리하우스) 제외 — 매장당 매출 왜곡 방지
+      '고양표준매장(패)', '기흥표준매장(패)', '롯데쇼핑(주) 동탄점_팝업',
+      'INT기흥표준매장_주식회사 한샘인테리어지에스대리점', 'INT이현위탁유통_퍼스트에이치',
+      '강동', '부천_미래엘', '부천_오늘의집']),
+    '리바트': new Set(['리바트 문경점']),  // 가구매장 아님
+    '까사미아': new Set(['L아울렛고양점(P)', 'L동부산점(P)', '팝업 등']),
+    '에몬스': new Set(['울산삼산리빙(법)', '외부인판매(김포현대아울렛점)'])
   };
   const cleanData = apiData.filter(r => {
     if (!VALID_BRANDS.includes(r.brand)) return false;
@@ -75,7 +82,8 @@ async function main() {
   Object.keys(STORE_NAME_MAPPING).forEach(brand => {
     Object.entries(STORE_NAME_MAPPING[brand]).forEach(([mapName, apiName]) => {
       if (!apiToMap[brand]) apiToMap[brand] = {};
-      apiToMap[brand][apiName] = mapName;
+      // apiName은 문자열 또는 배열(여러 API명 → 하나로 합산) 모두 지원
+      (Array.isArray(apiName) ? apiName : [apiName]).forEach(a => { apiToMap[brand][a] = mapName; });
     });
   });
 

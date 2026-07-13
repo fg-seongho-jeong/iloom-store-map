@@ -580,7 +580,6 @@ var STORES_RAW = [
   { name: "중화산4", addr: "전라북도 전주시 완산구 중화산동2가 528-6", lat: 35.8127713597618, lng: 127.119470194643 },
   { name: "제주5", addr: "제주특별자치도 제주시 연삼로 252", lat: 33.4920305936105, lng: 126.51925153494 },
   { name: "부천점", addr: "경기도 부천시 원미구 길주로 462", lat: 37.5045762195307, lng: 126.7938976482 },
-  { name: "현대백화점중동점", addr: "경기도 부천시 길주로 180 현대백화점 중동점 7층", lat: 37.5043163132049, lng: 126.76208267382 },
   { name: "롯데인천점", addr: "인천광역시 미추홀구 연남로35 롯데백화점 인천점 5층", lat: 37.4425062298688, lng: 126.701518656221 },
   { name: "원주3", addr: "강원도 원주시 호저면 원문로 668-9", lat: 37.3517801793616, lng: 127.896785516618 },
   { name: "춘천3", addr: "강원도 춘천시 동면 만천리 700", lat: 37.883767590444, lng: 127.763193053119 },
@@ -1084,6 +1083,11 @@ function _extractKeywords(s) {
   return cleaned.split(/\s+|[\-,_]/).filter(function(w) { return w.length >= 1; });
 }
 
+function _isClosed(brand, salesStoreName) {
+  return typeof CLOSED_STORES !== 'undefined' &&
+    CLOSED_STORES[brand] && CLOSED_STORES[brand][salesStoreName] !== undefined;
+}
+
 function findSalesData(brand, storeName, storeRegion) {
   if (typeof SALES_DATA === 'undefined') return null;
   // 1. 수기 매핑 테이블 (최우선 — 같은 매장의 다른 ID 합산 등 자동매칭으로 못 잡는 케이스)
@@ -1105,10 +1109,10 @@ function findSalesData(brand, storeName, storeRegion) {
     }
   }
   // 2. 정확한 이름 매칭
-  var match = SALES_DATA.find(function(d) { return d.brand === brand && d.store === storeName; });
+  var match = SALES_DATA.find(function(d) { return d.brand === brand && d.store === storeName && !_isClosed(brand, d.store); });
   if (match) return match;
   // 3. 부분 매칭
-  match = SALES_DATA.find(function(d) { return d.brand === brand && (d.store.indexOf(storeName) !== -1 || storeName.indexOf(d.store) !== -1); });
+  match = SALES_DATA.find(function(d) { return d.brand === brand && !_isClosed(brand, d.store) && (d.store.indexOf(storeName) !== -1 || storeName.indexOf(d.store) !== -1); });
   if (match) return match;
   // 4. 키워드 + region 매칭
   if (storeRegion) {
@@ -1117,6 +1121,7 @@ function findSalesData(brand, storeName, storeRegion) {
       var candidates = SALES_DATA.filter(function(d) {
         if (d.brand !== brand) return false;
         if (d.region !== storeRegion) return false;
+        if (_isClosed(brand, d.store)) return false;
         var sk = _extractKeywords(d.store);
         return markerKw.some(function(k) {
           return sk.some(function(s) { return s.indexOf(k) >= 0 || k.indexOf(s) >= 0; });
