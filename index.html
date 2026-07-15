@@ -410,7 +410,7 @@
       <div style="font-size:15px;font-weight:700;margin-bottom:10px;">커버리지 공백 분석</div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">일룸 없고 경쟁사 2개+ 몰린 공백</div>
       <div style="display:flex;gap:4px;margin-bottom:14px;">
-        <button class="gap-sub-tab active" onclick="switchGapMode('national')">전국</button>
+        <button class="gap-sub-tab active" onclick="switchGapMode('national')">지방</button>
         <button class="gap-sub-tab" onclick="switchGapMode('metro')">수도권</button>
       </div>
       <div id="gapFilterNational">
@@ -424,10 +424,10 @@
       <div id="gapFilterMetro" style="display:none;">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <span style="font-size:11px;color:var(--text-muted);">커버리지 반경</span>
-          <button class="gap-radius-btn-metro active" onclick="setCoverageRadius(1)">1km</button>
-          <button class="gap-radius-btn-metro" onclick="setCoverageRadius(2)">2km</button>
           <button class="gap-radius-btn-metro" onclick="setCoverageRadius(3)">3km</button>
-          <button class="gap-radius-btn-metro" onclick="setCoverageRadius(5)">5km</button>
+          <button class="gap-radius-btn-metro active" onclick="setCoverageRadius(5)">5km</button>
+          <button class="gap-radius-btn-metro" onclick="setCoverageRadius(7)">7km</button>
+          <button class="gap-radius-btn-metro" onclick="setCoverageRadius(10)">10km</button>
         </div>
       </div>
       <div id="gapSummary" style="margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;"></div>
@@ -2377,13 +2377,13 @@ function switchView(view) {
 function switchGapMode(mode) {
   gapMode = mode;
   document.querySelectorAll('.gap-sub-tab').forEach(function(t) {
-    t.classList.toggle('active', t.textContent.indexOf(mode === 'national' ? '전국' : '수도권') !== -1);
+    t.classList.toggle('active', t.textContent.indexOf(mode === 'national' ? '지방' : '수도권') !== -1);
   });
   document.getElementById('gapFilterNational').style.display = mode === 'national' ? '' : 'none';
   document.getElementById('gapFilterMetro').style.display = mode === 'metro' ? '' : 'none';
   // 모드 전환 시 기본 반경 설정
   if (mode === 'national') coverageRadius = 15;
-  else coverageRadius = 1;
+  else coverageRadius = 5;
   if (gapActive) runCoverageAnalysis();
 }
 
@@ -2413,11 +2413,11 @@ function runCoverageAnalysis() {
   // 대상 매장 필터링
   var iloomStores = allStores.filter(function(s) {
     if (s.brand !== '일룸') return false;
-    return isMetro ? metroRegions.indexOf(s.region) !== -1 : true;
+    return isMetro ? metroRegions.indexOf(s.region) !== -1 : metroRegions.indexOf(s.region) === -1;
   });
   var competitors = allStores.filter(function(s) {
     if (s.brand === '일룸') return false;
-    return isMetro ? metroRegions.indexOf(s.region) !== -1 : true;
+    return isMetro ? metroRegions.indexOf(s.region) !== -1 : metroRegions.indexOf(s.region) === -1;
   });
 
   // 각 경쟁사 매장 → 가장 가까운 일룸 거리 계산
@@ -2506,7 +2506,7 @@ function runCoverageAnalysis() {
 
   allStores.forEach(function(store) {
     if (!store.marker) return;
-    var inScope = isMetro ? metroRegions.indexOf(store.region) !== -1 : true;
+    var inScope = isMetro ? metroRegions.indexOf(store.region) !== -1 : metroRegions.indexOf(store.region) === -1;
     var show = inScope && (store.brand === '일룸' || uncoveredIds[store.id]);
     if (mapEngine === 'kakao') store.marker.setMap(show ? mapObj : null);
     else if (mapEngine === 'leaflet') {
@@ -2515,13 +2515,21 @@ function runCoverageAnalysis() {
     }
   });
 
-  // 수도권이면 줌
+  // 모드별 줌
   if (isMetro) {
     if (mapEngine === 'kakao' && mapObj) {
       mapObj.setCenter(new kakao.maps.LatLng(37.5, 127.0));
       mapObj.setLevel(9);
     } else if (mapEngine === 'leaflet' && mapObj) {
       mapObj.setView([37.5, 127.0], 10, { animate: true });
+    }
+  } else {
+    // 지방(비수도권) — 전국을 축소해서 지방 공백이 보이게
+    if (mapEngine === 'kakao' && mapObj) {
+      mapObj.setCenter(new kakao.maps.LatLng(36.3, 127.8));
+      mapObj.setLevel(13);
+    } else if (mapEngine === 'leaflet' && mapObj) {
+      mapObj.setView([36.3, 127.8], 8, { animate: true });
     }
   }
 
