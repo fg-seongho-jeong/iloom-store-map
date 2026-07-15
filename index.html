@@ -432,8 +432,8 @@
       </div>
       <div id="gapSummary" style="margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;"></div>
       <div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:10px;color:#94a3b8;line-height:1.5;">
-        <strong style="color:#fbbf24;">출점 우선순위 점수</strong> = 커버리지 밖 경쟁사 수 × √(지역 인구/만명)<br>
-        경쟁사가 많고 인구가 많은 지역일수록 높은 점수
+        <strong style="color:#fbbf24;">출점 우선순위 점수</strong> = 경쟁사 수 × √(인구/만명) × √(경쟁매출/억)<br>
+        경쟁사·인구·경쟁매출이 클수록(=미충족 시장이 클수록) 높은 점수
       </div>
     </div>
     <div class="store-list" id="gapResults" style="font-size:12px;"></div>
@@ -2471,6 +2471,16 @@ function runCoverageAnalysis() {
     }
   });
 
+  // 공백 히트: 커버리지 밖 경쟁사 주변 빨강 원 (겹치면 진해짐 = 공백 핫스팟)
+  var heatR = (isMetro ? 2 : 8) * 1000;
+  gapUncovered.forEach(function(comp) {
+    if (mapEngine === 'kakao' && mapObj) {
+      gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(comp.lat, comp.lng), radius: heatR, strokeWeight: 0, fillColor: '#ef4444', fillOpacity: 0.12, map: mapObj }));
+    } else if (mapEngine === 'leaflet' && mapObj) {
+      gapCircles.push(L.circle([comp.lat, comp.lng], { radius: heatR, stroke: false, fillColor: '#ef4444', fillOpacity: 0.12 }).addTo(mapObj));
+    }
+  });
+
   // 마커 표시: 일룸 + 커버리지 밖 경쟁사만
   var uncoveredIds = {};
   gapUncovered.forEach(function(s) { uncoveredIds[s.id] = true; });
@@ -2519,8 +2529,15 @@ function runCoverageAnalysis() {
     var stores = regionMap[region];
     var pop = (typeof POPULATION_DATA !== 'undefined' && POPULATION_DATA[region]) ? POPULATION_DATA[region].pop : 0;
     var popMan = pop / 10000;
-    var score = stores.length * Math.sqrt(popMan);
-    regionScores[region] = { score: Math.round(score), pop: pop, popMan: popMan };
+    // 커버리지 밖 경쟁사들의 25년 매출 합 (= 미충족 시장 규모)
+    var compSales = stores.reduce(function(sum, s) {
+      var sd = (typeof findSalesData === 'function') ? findSalesData(s.brand, s.name, s.region) : null;
+      return sum + (sd ? (sd.s25 || 0) : 0);
+    }, 0);
+    var compSalesEok = compSales / 1e8;
+    // 점수 = 경쟁사수 × √(인구/만명) × √(경쟁매출/억)  (경쟁밀도 × 잠재수요 × 실수요)
+    var score = stores.length * Math.sqrt(popMan) * Math.sqrt(compSalesEok > 0 ? compSalesEok : 1);
+    regionScores[region] = { score: Math.round(score), pop: pop, popMan: popMan, compSales: compSales, compSalesEok: compSalesEok };
   });
   // 스코어 내림차순 재정렬
   regionList.sort(function(a, b) { return regionScores[b].score - regionScores[a].score; });
@@ -2546,8 +2563,11 @@ function runCoverageAnalysis() {
         '<span style="font-weight:700;font-size:13px;">' + rankBadge + region + '</span>' +
         '<span style="font-size:11px;color:#f87171;font-weight:600;">' + stores.length + '개 매장</span>' +
       '</div>' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:11px;">' +
         '<span style="color:#cbd5e1;">인구 <strong style="color:#fff;font-family:DM Mono,monospace;">' + popStr + '</strong></span>' +
+        '<span style="color:#cbd5e1;">경쟁매출 <strong style="color:#fff;font-family:DM Mono,monospace;">' + (scoreData.compSalesEok >= 1 ? scoreData.compSalesEok.toFixed(0) + '억' : Math.round(scoreData.compSales/1e4) + '만') + '</strong></span>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:6px;font-size:11px;">' +
         '<span style="color:#cbd5e1;">출점 우선순위 <strong style="color:#fbbf24;font-family:DM Mono,monospace;">' + scoreData.score + '점</strong></span>' +
       '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' +
