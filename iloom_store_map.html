@@ -410,10 +410,10 @@
       <div style="font-size:15px;font-weight:700;margin-bottom:10px;">커버리지 공백 분석</div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">일룸 없고 경쟁사 2개+ 몰린 공백</div>
       <div style="display:flex;gap:4px;margin-bottom:14px;">
-        <button class="gap-sub-tab active" onclick="switchGapMode('national')">지방</button>
-        <button class="gap-sub-tab" onclick="switchGapMode('metro')">수도권</button>
+        <button class="gap-sub-tab active" onclick="switchGapMode('metro')">수도권</button>
+        <button class="gap-sub-tab" onclick="switchGapMode('national')">지방</button>
       </div>
-      <div id="gapFilterNational">
+      <div id="gapFilterNational" style="display:none;">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <span style="font-size:11px;color:var(--text-muted);">커버리지 반경</span>
           <button class="gap-radius-btn" onclick="setCoverageRadius(10)">10km</button>
@@ -421,7 +421,7 @@
           <button class="gap-radius-btn" onclick="setCoverageRadius(20)">20km</button>
         </div>
       </div>
-      <div id="gapFilterMetro" style="display:none;">
+      <div id="gapFilterMetro">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <span style="font-size:11px;color:var(--text-muted);">커버리지 반경</span>
           <button class="gap-radius-btn-metro" onclick="setCoverageRadius(3)">3km</button>
@@ -2335,8 +2335,8 @@ var gapActive = false;
 var gapCircles = [];
 var gapUncovered = [];
 var currentView = 'map';
-var gapMode = 'national';
-var coverageRadius = 15; // km
+var gapMode = 'metro';
+var coverageRadius = 5; // km
 
 function switchView(view) {
   currentView = view;
@@ -2363,7 +2363,7 @@ function switchView(view) {
       document.getElementById('heatmapLegend').classList.remove('visible');
     }
     gapActive = true;
-    runCoverageAnalysis();
+    runCoverageAnalysis(true);
   } else {
     mapSidebar.style.display = 'flex';
     gapSidebarEl.style.display = 'none';
@@ -2384,7 +2384,7 @@ function switchGapMode(mode) {
   // 모드 전환 시 기본 반경 설정
   if (mode === 'national') coverageRadius = 15;
   else coverageRadius = 5;
-  if (gapActive) runCoverageAnalysis();
+  if (gapActive) runCoverageAnalysis(true);
 }
 
 function setCoverageRadius(r) {
@@ -2404,7 +2404,7 @@ function clearGapOverlays() {
   gapCircles = [];
 }
 
-function runCoverageAnalysis() {
+function runCoverageAnalysis(fitView) {
   clearGapOverlays();
 
   var metroRegions = ['서울','경기','인천'];
@@ -2515,21 +2515,15 @@ function runCoverageAnalysis() {
     }
   });
 
-  // 모드별 줌
-  if (isMetro) {
-    if (mapEngine === 'kakao' && mapObj) {
-      mapObj.setCenter(new kakao.maps.LatLng(37.5, 127.0));
-      mapObj.setLevel(9);
-    } else if (mapEngine === 'leaflet' && mapObj) {
-      mapObj.setView([37.5, 127.0], 10, { animate: true });
-    }
-  } else {
-    // 지방(비수도권) — 전국을 축소해서 지방 공백이 보이게
-    if (mapEngine === 'kakao' && mapObj) {
-      mapObj.setCenter(new kakao.maps.LatLng(36.3, 127.8));
-      mapObj.setLevel(13);
-    } else if (mapEngine === 'leaflet' && mapObj) {
-      mapObj.setView([36.3, 127.8], 8, { animate: true });
+  // 모드별 줌 — 모드 전환/최초 진입 때만(fitView). 반경 변경 시엔 보던 화면 그대로 유지.
+  if (fitView) {
+    if (isMetro) {
+      if (mapEngine === 'kakao' && mapObj) { mapObj.setCenter(new kakao.maps.LatLng(37.5, 127.0)); mapObj.setLevel(9); }
+      else if (mapEngine === 'leaflet' && mapObj) { mapObj.setView([37.5, 127.0], 10, { animate: true }); }
+    } else {
+      // 지방(비수도권) — 전국을 축소해서 지방 공백이 보이게
+      if (mapEngine === 'kakao' && mapObj) { mapObj.setCenter(new kakao.maps.LatLng(36.3, 127.8)); mapObj.setLevel(13); }
+      else if (mapEngine === 'leaflet' && mapObj) { mapObj.setView([36.3, 127.8], 8, { animate: true }); }
     }
   }
 
