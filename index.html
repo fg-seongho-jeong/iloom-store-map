@@ -408,7 +408,7 @@
   <div class="sidebar" id="gapSidebar" style="display:none;">
     <div class="sidebar-header">
       <div style="font-size:15px;font-weight:700;margin-bottom:10px;">커버리지 공백 분석</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">일룸 커버리지 밖 경쟁사 매장</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">일룸 없고 경쟁사 2개+ 몰린 공백</div>
       <div style="display:flex;gap:4px;margin-bottom:14px;">
         <button class="gap-sub-tab active" onclick="switchGapMode('national')">전국</button>
         <button class="gap-sub-tab" onclick="switchGapMode('metro')">수도권</button>
@@ -2435,6 +2435,14 @@ function runCoverageAnalysis() {
       gapUncovered.push(comp);
     }
   });
+  var uncoveredAllCount = gapUncovered.length;
+
+  // 경쟁사 2개 이상 몰린 공백만 남김 (고립 단일 경쟁사 제외) — 일룸 없고 경쟁 검증된 상권
+  var clusterR = isMetro ? 2 : 5;
+  gapUncovered = gapUncovered.filter(function(comp) {
+    var near = competitors.filter(function(c2) { return calcDistance(comp.lat, comp.lng, c2.lat, c2.lng) <= clusterR; });
+    return near.length >= 2;
+  });
 
   // 거리순 정렬 (먼 곳부터)
   gapUncovered.sort(function(a, b) { return b._iloomDist - a._iloomDist; });
@@ -2507,7 +2515,7 @@ function runCoverageAnalysis() {
   }
 
   // 요약 카드
-  var coveredCount = competitors.length - gapUncovered.length;
+  var coveredCount = competitors.length - uncoveredAllCount;
   var covPct = competitors.length > 0 ? Math.round(coveredCount / competitors.length * 100) : 0;
   var summaryHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
     '<span style="color:var(--text);">커버리지 <strong style="color:#34d399;">' + covPct + '%</strong></span>' +
@@ -2517,7 +2525,7 @@ function runCoverageAnalysis() {
     '<div style="width:' + covPct + '%;height:100%;background:#34d399;border-radius:3px;"></div>' +
   '</div>' +
   '<div style="margin-top:8px;font-size:12px;">' +
-    '<span style="color:#f87171;font-weight:600;">커버리지 밖 ' + gapUncovered.length + '개</span> 경쟁사 매장' +
+    '<span style="color:#f87171;font-weight:600;">경쟁사 2개+ 몰린 공백 ' + gapUncovered.length + '곳</span>' +
   '</div>';
   document.getElementById('gapSummary').innerHTML = summaryHtml;
 
