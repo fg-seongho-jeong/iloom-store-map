@@ -2493,6 +2493,17 @@ function runCoverageAnalysis() {
   var uncoveredIds = {};
   gapUncovered.forEach(function(s) { uncoveredIds[s.id] = true; });
 
+  // 공백 클러스터가 아닌 나머지 경쟁사는 회색 점으로 흐리게 (전국 경쟁 지형 컨텍스트)
+  var dotR = isMetro ? 300 : 500;
+  competitors.forEach(function(c) {
+    if (uncoveredIds[c.id]) return;
+    if (mapEngine === 'kakao' && mapObj) {
+      gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(c.lat, c.lng), radius: dotR, strokeWeight: 0, fillColor: '#94a3b8', fillOpacity: 0.45, map: mapObj }));
+    } else if (mapEngine === 'leaflet' && mapObj) {
+      gapCircles.push(L.circle([c.lat, c.lng], { radius: dotR, stroke: false, fillColor: '#94a3b8', fillOpacity: 0.45 }).addTo(mapObj));
+    }
+  });
+
   allStores.forEach(function(store) {
     if (!store.marker) return;
     var inScope = isMetro ? metroRegions.indexOf(store.region) !== -1 : true;
