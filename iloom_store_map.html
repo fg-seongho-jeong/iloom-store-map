@@ -409,27 +409,12 @@
     <div class="sidebar-header">
       <div style="font-size:15px;font-weight:700;margin-bottom:10px;">커버리지 공백 분석</div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">일룸 없고 경쟁사 2개+ 몰린 공백</div>
-      <div style="display:flex;gap:4px;margin-bottom:14px;">
-        <button class="gap-sub-tab active" onclick="switchGapMode('metro')">수도권</button>
-        <button class="gap-sub-tab" onclick="switchGapMode('national')">지방</button>
+      <div id="gapRegionBtns" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px;"></div>
+      <div id="gapRadiusRow" style="display:none;align-items:center;gap:6px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-muted);">커버리지 반경</span>
+        <span id="gapRadiusBtns" style="display:flex;gap:6px;flex-wrap:wrap;"></span>
       </div>
-      <div id="gapFilterNational" style="display:none;">
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:11px;color:var(--text-muted);">커버리지 반경</span>
-          <button class="gap-radius-btn" onclick="setCoverageRadius(10)">10km</button>
-          <button class="gap-radius-btn active" onclick="setCoverageRadius(15)">15km</button>
-          <button class="gap-radius-btn" onclick="setCoverageRadius(20)">20km</button>
-        </div>
-      </div>
-      <div id="gapFilterMetro">
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <span style="font-size:11px;color:var(--text-muted);">커버리지 반경</span>
-          <button class="gap-radius-btn-metro" onclick="setCoverageRadius(3)">3km</button>
-          <button class="gap-radius-btn-metro active" onclick="setCoverageRadius(5)">5km</button>
-          <button class="gap-radius-btn-metro" onclick="setCoverageRadius(7)">7km</button>
-          <button class="gap-radius-btn-metro" onclick="setCoverageRadius(10)">10km</button>
-        </div>
-      </div>
+      <div id="gapRadiusNote" style="font-size:10px;color:var(--text-dim);line-height:1.5;">지역별 기준 자동 적용 — 수도권·광역시 5km · 그 외 10km. 지역을 선택하면 반경 조정 가능.</div>
       <div id="gapSummary" style="margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;"></div>
       <div style="margin-top:10px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:#cbd5e1;line-height:1.6;">
         <strong style="color:#fbbf24;font-size:12px;">출점 매력도 (0~100)</strong><br>
@@ -642,17 +627,25 @@ function getRegion(addr) {
 }
 
 // 시/군 단위 추출 (공백분석 그룹핑용). 광역시=광역시+구, 도=시/군 단위.
+// 주소 표기가 불규칙(시도 붙여쓰기 등)해도 견고하게 동작하도록 정규식 기반.
+var GETCITY_PREFIXES = ['서울특별시','서울','부산광역시','부산','대구광역시','대구','인천광역시','인천','광주광역시','광주','대전광역시','대전','울산광역시','울산','세종특별자치시','세종','경기도','경기','강원특별자치도','강원도','강원','충청북도','충북','충청남도','충남','전북특별자치도','전라북도','전북','전라남도','전남','경상북도','경북','경상남도','경남','제주특별자치도','제주도','제주'];
 function getCity(addr) {
   if (!addr) return '기타';
-  var parts = addr.trim().split(/\s+/);
-  var sido = parts[0];
-  var metroMap = { '서울':'서울','서울특별시':'서울','부산':'부산','부산광역시':'부산','대구':'대구','대구광역시':'대구','인천':'인천','인천광역시':'인천','광주':'광주','광주광역시':'광주','대전':'대전','대전광역시':'대전','울산':'울산','울산광역시':'울산' };
-  if (metroMap[sido]) {
-    var gu = parts[1] || '';
-    return metroMap[sido] + (gu ? ' ' + gu : '');
+  var a = addr.trim();
+  if (a.indexOf('세종') === 0) return '세종';
+  var region = getRegion(a);
+  // 시도 접두어 제거 (긴 표기부터)
+  var rest = a;
+  for (var p = 0; p < GETCITY_PREFIXES.length; p++) {
+    if (rest.indexOf(GETCITY_PREFIXES[p]) === 0) { rest = rest.substring(GETCITY_PREFIXES[p].length).replace(/^\s+/, ''); break; }
   }
-  if (sido.indexOf('세종') === 0) return '세종';
-  return parts[1] || getRegion(addr);
+  var metros = ['서울','부산','대구','인천','광주','대전','울산'];
+  if (metros.indexOf(region) !== -1) {
+    var mgu = rest.match(/([가-힣]+구)/);
+    return mgu ? region + ' ' + mgu[1] : region;
+  }
+  var mcity = rest.match(/([가-힣]+[시군])/);
+  return mcity ? mcity[1] : region;
 }
 
 var REGION_ORDER = ['서울','인천','경기','대전','충북','충남','대구','경북','부산','울산','경남','광주','전북','전남','강원','제주'];
@@ -2354,8 +2347,10 @@ var gapActive = false;
 var gapCircles = [];
 var gapUncovered = [];
 var currentView = 'map';
-var gapMode = 'metro';
-var coverageRadius = 5; // km
+var gapRegion = '전체';
+var coverageRadius = 5; // km (특정 지역 선택 시 사용)
+var GAP_METRO_SET = ['서울','경기','인천','대전','대구','부산','울산','광주']; // 3/5/7/10km 그룹
+var GAP_REGIONS = ['전체','서울','인천','경기','대전','충북','충남','대구','경북','부산','울산','경남','광주','전북','전남','강원','제주'];
 
 function switchView(view) {
   currentView = view;
@@ -2382,7 +2377,8 @@ function switchView(view) {
       document.getElementById('heatmapLegend').classList.remove('visible');
     }
     gapActive = true;
-    runCoverageAnalysis(true);
+    renderGapRegionButtons();
+    selectGapRegion(gapRegion);
   } else {
     mapSidebar.style.display = 'flex';
     gapSidebarEl.style.display = 'none';
@@ -2393,23 +2389,42 @@ function switchView(view) {
   }
 }
 
-function switchGapMode(mode) {
-  gapMode = mode;
-  document.querySelectorAll('.gap-sub-tab').forEach(function(t) {
-    t.classList.toggle('active', t.textContent.indexOf(mode === 'national' ? '지방' : '수도권') !== -1);
+function isGapMetro(region) { return GAP_METRO_SET.indexOf(region) !== -1; }
+function gapRadiusSet(region) { return isGapMetro(region) ? [3,5,7,10] : [5,10,15,20]; }
+function gapDefaultRadius(region) { return isGapMetro(region) ? 5 : 10; }
+
+function renderGapRegionButtons() {
+  document.getElementById('gapRegionBtns').innerHTML = GAP_REGIONS.map(function(r) {
+    return '<button class="region-btn ' + (r === gapRegion ? 'active' : '') + '" onclick="selectGapRegion(\'' + r + '\')">' + r + '</button>';
+  }).join('');
+}
+
+function renderGapRadiusButtons() {
+  document.getElementById('gapRadiusBtns').innerHTML = gapRadiusSet(gapRegion).map(function(r) {
+    return '<button class="gap-radius-btn ' + (r === coverageRadius ? 'active' : '') + '" onclick="setCoverageRadius(' + r + ')">' + r + 'km</button>';
+  }).join('');
+}
+
+function selectGapRegion(region) {
+  gapRegion = region;
+  document.querySelectorAll('#gapRegionBtns .region-btn').forEach(function(b) {
+    b.classList.toggle('active', b.textContent === region);
   });
-  document.getElementById('gapFilterNational').style.display = mode === 'national' ? '' : 'none';
-  document.getElementById('gapFilterMetro').style.display = mode === 'metro' ? '' : 'none';
-  // 모드 전환 시 기본 반경 설정
-  if (mode === 'national') coverageRadius = 15;
-  else coverageRadius = 5;
+  if (region === '전체') {
+    document.getElementById('gapRadiusRow').style.display = 'none';
+    document.getElementById('gapRadiusNote').style.display = '';
+  } else {
+    coverageRadius = gapDefaultRadius(region);
+    renderGapRadiusButtons();
+    document.getElementById('gapRadiusRow').style.display = 'flex';
+    document.getElementById('gapRadiusNote').style.display = 'none';
+  }
   if (gapActive) runCoverageAnalysis(true);
 }
 
 function setCoverageRadius(r) {
   coverageRadius = r;
-  var btnClass = gapMode === 'national' ? '.gap-radius-btn' : '.gap-radius-btn-metro';
-  document.querySelectorAll(btnClass).forEach(function(b) {
+  document.querySelectorAll('#gapRadiusBtns .gap-radius-btn').forEach(function(b) {
     b.classList.toggle('active', parseInt(b.textContent) === r);
   });
   if (gapActive) runCoverageAnalysis();
@@ -2426,40 +2441,38 @@ function clearGapOverlays() {
 function runCoverageAnalysis(fitView) {
   clearGapOverlays();
 
-  var metroRegions = ['서울','경기','인천'];
-  var isMetro = gapMode === 'metro';
+  var isAll = gapRegion === '전체';
 
-  // 대상 매장 필터링
-  var iloomStores = allStores.filter(function(s) {
-    if (s.brand !== '일룸') return false;
-    return isMetro ? metroRegions.indexOf(s.region) !== -1 : metroRegions.indexOf(s.region) === -1;
-  });
-  var competitors = allStores.filter(function(s) {
-    if (s.brand === '일룸') return false;
-    return isMetro ? metroRegions.indexOf(s.region) !== -1 : metroRegions.indexOf(s.region) === -1;
-  });
+  var allIloom = allStores.filter(function(s) { return s.brand === '일룸'; });
+  var allComp  = allStores.filter(function(s) { return s.brand !== '일룸'; });
 
-  // 각 경쟁사 매장 → 가장 가까운 일룸 거리 계산
+  // 후보 경쟁사: '전체'면 전부, 특정 지역이면 그 지역만
+  var candidateComp = isAll ? allComp : allComp.filter(function(s) { return s.region === gapRegion; });
+
+  // 반경/클러스터 기준 — 특정 지역이면 선택 반경, '전체'면 지역 유형별 자동
+  function radiusOf(region)  { return isAll ? (isGapMetro(region) ? 5 : 10) : coverageRadius; }
+  function clusterOf(region) { return isGapMetro(region) ? 2 : 5; }
+  function heatOf(region)    { return isGapMetro(region) ? 2 : 8; }
+  function dotOf(region)     { return isGapMetro(region) ? 300 : 500; }
+
+  // 각 후보 경쟁사 → 가장 가까운 일룸 거리 (전국 일룸 기준: 인접 지역 커버 반영)
   gapUncovered = [];
-  competitors.forEach(function(comp) {
-    var minDist = Infinity;
-    var nearest = null;
-    iloomStores.forEach(function(il) {
+  candidateComp.forEach(function(comp) {
+    var minDist = Infinity, nearest = null;
+    allIloom.forEach(function(il) {
       var d = calcDistance(comp.lat, comp.lng, il.lat, il.lng);
       if (d < minDist) { minDist = d; nearest = il; }
     });
     comp._iloomDist = minDist;
     comp._nearestIloom = nearest;
-    if (minDist > coverageRadius) {
-      gapUncovered.push(comp);
-    }
+    if (minDist > radiusOf(comp.region)) gapUncovered.push(comp);
   });
   var uncoveredAllCount = gapUncovered.length;
 
-  // 경쟁사 2개 이상 몰린 공백만 남김 (고립 단일 경쟁사 제외) — 일룸 없고 경쟁 검증된 상권
-  var clusterR = isMetro ? 2 : 5;
+  // 경쟁사 2개 이상 몰린 공백만 (고립 단일 경쟁사 제외). 인접 지역 경쟁사도 포함해 판정.
   gapUncovered = gapUncovered.filter(function(comp) {
-    var near = competitors.filter(function(c2) { return calcDistance(comp.lat, comp.lng, c2.lat, c2.lng) <= clusterR; });
+    var cr = clusterOf(comp.region);
+    var near = allComp.filter(function(c2) { return calcDistance(comp.lat, comp.lng, c2.lat, c2.lng) <= cr; });
     return near.length >= 2;
   });
 
@@ -2475,55 +2488,44 @@ function runCoverageAnalysis(fitView) {
   });
   var cityList = Object.keys(cityMap);
 
-  // 지도에 표시: 일룸 커버리지 원(초록) + 커버리지 밖 경쟁사 마커(빨강)
-  // 일룸 커버리지 원
-  iloomStores.forEach(function(il) {
+  // 일룸 커버리지 원(초록) — 전국 일룸 모두 그림(특정 지역 뷰에선 화면 밖은 자동 미표시)
+  allIloom.forEach(function(il) {
+    var r = radiusOf(il.region) * 1000;
     if (mapEngine === 'kakao' && mapObj) {
-      var circle = new kakao.maps.Circle({
-        center: new kakao.maps.LatLng(il.lat, il.lng),
-        radius: coverageRadius * 1000,
-        strokeWeight: 1, strokeColor: '#34d399', strokeOpacity: 0.4, strokeStyle: 'solid',
-        fillColor: '#34d399', fillOpacity: 0.08, map: mapObj
-      });
-      gapCircles.push(circle);
+      gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(il.lat, il.lng), radius: r, strokeWeight: 1, strokeColor: '#34d399', strokeOpacity: 0.4, strokeStyle: 'solid', fillColor: '#34d399', fillOpacity: 0.08, map: mapObj }));
     } else if (mapEngine === 'leaflet' && mapObj) {
-      var circle = L.circle([il.lat, il.lng], {
-        radius: coverageRadius * 1000,
-        color: '#34d399', weight: 1, opacity: 0.4,
-        fillColor: '#34d399', fillOpacity: 0.08
-      }).addTo(mapObj);
-      gapCircles.push(circle);
+      gapCircles.push(L.circle([il.lat, il.lng], { radius: r, color: '#34d399', weight: 1, opacity: 0.4, fillColor: '#34d399', fillOpacity: 0.08 }).addTo(mapObj));
     }
   });
 
   // 공백 히트: 커버리지 밖 경쟁사 주변 빨강 원 (겹치면 진해짐 = 공백 핫스팟)
-  var heatR = (isMetro ? 2 : 8) * 1000;
   gapUncovered.forEach(function(comp) {
+    var hr = heatOf(comp.region) * 1000;
     if (mapEngine === 'kakao' && mapObj) {
-      gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(comp.lat, comp.lng), radius: heatR, strokeWeight: 0, fillColor: '#ef4444', fillOpacity: 0.12, map: mapObj }));
+      gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(comp.lat, comp.lng), radius: hr, strokeWeight: 0, fillColor: '#ef4444', fillOpacity: 0.12, map: mapObj }));
     } else if (mapEngine === 'leaflet' && mapObj) {
-      gapCircles.push(L.circle([comp.lat, comp.lng], { radius: heatR, stroke: false, fillColor: '#ef4444', fillOpacity: 0.12 }).addTo(mapObj));
+      gapCircles.push(L.circle([comp.lat, comp.lng], { radius: hr, stroke: false, fillColor: '#ef4444', fillOpacity: 0.12 }).addTo(mapObj));
     }
   });
 
-  // 마커 표시: 일룸 + 커버리지 밖 경쟁사만
   var uncoveredIds = {};
   gapUncovered.forEach(function(s) { uncoveredIds[s.id] = true; });
 
-  // 공백 클러스터가 아닌 나머지 경쟁사는 회색 점으로 흐리게 (전국 경쟁 지형 컨텍스트)
-  var dotR = isMetro ? 300 : 500;
-  competitors.forEach(function(c) {
+  // 공백 클러스터가 아닌 나머지 경쟁사는 회색 점으로 흐리게 (경쟁 지형 컨텍스트)
+  candidateComp.forEach(function(c) {
     if (uncoveredIds[c.id]) return;
+    var dr = dotOf(c.region);
     if (mapEngine === 'kakao' && mapObj) {
-      gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(c.lat, c.lng), radius: dotR, strokeWeight: 0, fillColor: '#94a3b8', fillOpacity: 0.45, map: mapObj }));
+      gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(c.lat, c.lng), radius: dr, strokeWeight: 0, fillColor: '#94a3b8', fillOpacity: 0.45, map: mapObj }));
     } else if (mapEngine === 'leaflet' && mapObj) {
-      gapCircles.push(L.circle([c.lat, c.lng], { radius: dotR, stroke: false, fillColor: '#94a3b8', fillOpacity: 0.45 }).addTo(mapObj));
+      gapCircles.push(L.circle([c.lat, c.lng], { radius: dr, stroke: false, fillColor: '#94a3b8', fillOpacity: 0.45 }).addTo(mapObj));
     }
   });
 
+  // 마커 표시: (선택 지역의) 일룸 + 커버리지 밖 경쟁사
   allStores.forEach(function(store) {
     if (!store.marker) return;
-    var inScope = isMetro ? metroRegions.indexOf(store.region) !== -1 : metroRegions.indexOf(store.region) === -1;
+    var inScope = isAll ? true : (store.region === gapRegion);
     var show = inScope && (store.brand === '일룸' || uncoveredIds[store.id]);
     if (mapEngine === 'kakao') store.marker.setMap(show ? mapObj : null);
     else if (mapEngine === 'leaflet') {
@@ -2532,31 +2534,37 @@ function runCoverageAnalysis(fitView) {
     }
   });
 
-  // 모드별 줌 — 모드 전환/최초 진입 때만(fitView). 반경 변경 시엔 보던 화면 그대로 유지.
+  // 줌 — 지역 전환/최초 진입 때만(fitView). 반경 변경 시엔 보던 화면 유지.
   if (fitView) {
-    if (isMetro) {
-      if (mapEngine === 'kakao' && mapObj) { mapObj.setCenter(new kakao.maps.LatLng(37.5, 127.0)); mapObj.setLevel(9); }
-      else if (mapEngine === 'leaflet' && mapObj) { mapObj.setView([37.5, 127.0], 10, { animate: true }); }
-    } else {
-      // 지방(비수도권) — 전국을 축소해서 지방 공백이 보이게
+    if (isAll) {
       if (mapEngine === 'kakao' && mapObj) { mapObj.setCenter(new kakao.maps.LatLng(36.3, 127.8)); mapObj.setLevel(13); }
-      else if (mapEngine === 'leaflet' && mapObj) { mapObj.setView([36.3, 127.8], 8, { animate: true }); }
+      else if (mapEngine === 'leaflet' && mapObj) { mapObj.setView([36.3, 127.8], 7, { animate: true }); }
+    } else {
+      var pts = allStores.filter(function(s) { return s.region === gapRegion; });
+      if (pts.length && mapEngine === 'kakao' && mapObj) {
+        var bounds = new kakao.maps.LatLngBounds();
+        pts.forEach(function(p) { bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)); });
+        mapObj.setBounds(bounds);
+      } else if (pts.length && mapEngine === 'leaflet' && mapObj) {
+        mapObj.fitBounds(pts.map(function(p) { return [p.lat, p.lng]; }), { padding: [40, 40] });
+      }
     }
   }
 
   // 요약 카드
-  var coveredCount = competitors.length - uncoveredAllCount;
-  var covPct = competitors.length > 0 ? Math.round(coveredCount / competitors.length * 100) : 0;
-  var modeLabel = isMetro ? '수도권' : '지방';
+  var coveredCount = candidateComp.length - uncoveredAllCount;
+  var covPct = candidateComp.length > 0 ? Math.round(coveredCount / candidateComp.length * 100) : 0;
+  var modeLabel = isAll ? '전국' : gapRegion;
+  var radiusLabel = isAll ? '지역별 기준(수도권·광역시 5km · 그 외 10km)' : ('반경 ' + coverageRadius + 'km');
   var summaryHtml =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
-      '<span style="color:var(--text);font-size:13px;">일룸 커버리지 <strong style="color:#34d399;font-size:16px;">' + covPct + '%</strong></span>' +
-      '<span style="font-size:11px;color:var(--text-dim);">경쟁사 ' + coveredCount + '/' + competitors.length + '곳</span>' +
+      '<span style="color:var(--text);font-size:13px;">' + modeLabel + ' 커버리지 <strong style="color:#34d399;font-size:16px;">' + covPct + '%</strong></span>' +
+      '<span style="font-size:11px;color:var(--text-dim);">경쟁사 ' + coveredCount + '/' + candidateComp.length + '곳</span>' +
     '</div>' +
     '<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;">' +
       '<div style="width:' + covPct + '%;height:100%;background:#34d399;border-radius:3px;"></div>' +
     '</div>' +
-    '<div style="font-size:10px;color:var(--text-dim);margin-top:5px;">' + modeLabel + ' 경쟁사 매장 중 일룸 반경 ' + coverageRadius + 'km 안에 든 비율</div>' +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:5px;">' + modeLabel + ' 경쟁사 매장 중 일룸 ' + radiusLabel + ' 안에 든 비율</div>' +
     '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">' +
       '<div style="font-size:15px;"><span style="color:#f87171;font-weight:700;">🎯 공백 상권 ' + cityList.length + '곳</span></div>' +
       '<div style="font-size:11px;color:#cbd5e1;margin-top:3px;line-height:1.5;">일룸이 없는데 경쟁사가 2곳 이상 몰린 지역 <span style="color:var(--text-dim);">(경쟁사 총 ' + gapUncovered.length + '개)</span></div>' +
@@ -2634,7 +2642,7 @@ function runCoverageAnalysis(fitView) {
   });
 
   if (gapUncovered.length === 0) {
-    html = '<div style="text-align:center;color:var(--text-dim);padding:32px 20px;">커버리지 ' + coverageRadius + 'km 내 모든 경쟁사가 포함됩니다</div>';
+    html = '<div style="text-align:center;color:var(--text-dim);padding:32px 20px;">' + modeLabel + ' — 경쟁사 2곳+ 몰린 공백 상권이 없습니다<br><span style="font-size:11px;">(반경을 줄이면 더 촘촘히 볼 수 있어요)</span></div>';
   }
 
   document.getElementById('gapResults').innerHTML = html;
