@@ -2368,9 +2368,8 @@ function switchView(view) {
       document.getElementById('heatmapLegend').classList.remove('visible');
     }
     gapActive = true;
-    clearDistrictBoundaries(); // 지도 뷰의 파란 경계선은 공백분석과 별개 → 진입 시 제거
     renderGapRegionButtons();
-    selectGapRegion(gapRegion);
+    selectGapRegion(gapRegion); // 지도 뷰 경계 제거 + 공백분석 선택 지역 경계 그리기까지 여기서 처리
   } else {
     mapSidebar.style.display = 'flex';
     gapSidebarEl.style.display = 'none';
@@ -2412,7 +2411,10 @@ function selectGapRegion(region) {
     document.getElementById('gapRadiusRow').style.display = 'flex';
     document.getElementById('gapRadiusNote').style.display = 'none';
   }
-  if (gapActive) runCoverageAnalysis(true);
+  if (gapActive) {
+    drawDistrictBoundaries(region); // 공백분석에서도 선택 지역 경계 표시(이전 경계는 자동 제거, '전체'면 없음)
+    runCoverageAnalysis(true);
+  }
 }
 
 function setCoverageRadius(r) {
