@@ -951,7 +951,7 @@ function drawDistrictBoundaries(region) {
 
 function setFilter(region) {
   activeFilter = region;
-  document.querySelectorAll('.region-btn').forEach(function(btn) {
+  document.querySelectorAll('#regionFilters .region-btn').forEach(function(btn) {
     btn.classList.toggle('active', btn.textContent === region);
   });
   renderStoreList();
@@ -2377,6 +2377,7 @@ function switchView(view) {
       document.getElementById('heatmapLegend').classList.remove('visible');
     }
     gapActive = true;
+    clearDistrictBoundaries(); // 지도 뷰의 파란 경계선은 공백분석과 별개 → 진입 시 제거
     renderGapRegionButtons();
     selectGapRegion(gapRegion);
   } else {
@@ -2386,6 +2387,7 @@ function switchView(view) {
     gapActive = false;
     clearGapOverlays();
     updateMarkers();
+    drawDistrictBoundaries(activeFilter); // 지도 뷰 복귀 시 선택 지역 경계선 복원
   }
 }
 
