@@ -431,15 +431,15 @@
         </div>
       </div>
       <div id="gapSummary" style="margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;"></div>
-      <div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:10px;color:#94a3b8;line-height:1.5;">
-        <strong style="color:#fbbf24;">출점 우선순위 점수</strong> = 경쟁사 수 × √(인구/만명) × √(경쟁매출/억)<br>
-        경쟁사·인구·경쟁매출이 클수록(=미충족 시장이 클수록) 높은 점수
+      <div style="margin-top:10px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:#cbd5e1;line-height:1.6;">
+        <strong style="color:#fbbf24;font-size:12px;">출점 매력도 (0~100)</strong><br>
+        경쟁 매장이 많고 매출이 클수록 높음. 일룸 없는 곳 중 <strong style="color:#fff;">검증된 시장이 큰 순서</strong>로 1위=100 기준 환산.
       </div>
-      <div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;line-height:1.9;color:#cbd5e1;">
-        <div style="font-size:10px;color:#94a3b8;margin-bottom:4px;font-weight:600;">범례</div>
-        <div><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#ef4444;vertical-align:middle;margin-right:7px;"></span>공백 핫스팟 (일룸X · 경쟁사 2개+)</div>
-        <div><span style="display:inline-block;width:11px;height:11px;border-radius:50%;border:2px solid #34d399;background:rgba(52,211,153,0.15);box-sizing:border-box;vertical-align:middle;margin-right:7px;"></span>일룸 커버리지 반경</div>
-        <div><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#94a3b8;vertical-align:middle;margin-right:7px;"></span>그 외 경쟁사 (커버됨·고립)</div>
+      <div style="margin-top:8px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12.5px;line-height:2;color:#e2e8f0;">
+        <div style="font-size:11px;color:#94a3b8;margin-bottom:5px;font-weight:700;">범례</div>
+        <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:#ef4444;vertical-align:middle;margin-right:8px;"></span>공백 핫스팟 (일룸X · 경쟁사 2곳+)</div>
+        <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;border:2px solid #34d399;background:rgba(52,211,153,0.15);box-sizing:border-box;vertical-align:middle;margin-right:8px;"></span>일룸 커버리지 반경</div>
+        <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:#94a3b8;vertical-align:middle;margin-right:8px;"></span>그 외 경쟁사 (커버됨·고립)</div>
       </div>
     </div>
     <div class="store-list" id="gapResults" style="font-size:12px;"></div>
@@ -639,6 +639,20 @@ function getRegion(addr) {
   if (addr.indexOf('강원') === 0) return '강원';
   if (addr.indexOf('제주') === 0) return '제주';
   return '기타';
+}
+
+// 시/군 단위 추출 (공백분석 그룹핑용). 광역시=광역시+구, 도=시/군 단위.
+function getCity(addr) {
+  if (!addr) return '기타';
+  var parts = addr.trim().split(/\s+/);
+  var sido = parts[0];
+  var metroMap = { '서울':'서울','서울특별시':'서울','부산':'부산','부산광역시':'부산','대구':'대구','대구광역시':'대구','인천':'인천','인천광역시':'인천','광주':'광주','광주광역시':'광주','대전':'대전','대전광역시':'대전','울산':'울산','울산광역시':'울산' };
+  if (metroMap[sido]) {
+    var gu = parts[1] || '';
+    return metroMap[sido] + (gu ? ' ' + gu : '');
+  }
+  if (sido.indexOf('세종') === 0) return '세종';
+  return parts[1] || getRegion(addr);
 }
 
 var REGION_ORDER = ['서울','인천','경기','대전','충북','충남','대구','경북','부산','울산','경남','광주','전북','전남','강원','제주'];
@@ -2452,16 +2466,14 @@ function runCoverageAnalysis(fitView) {
   // 거리순 정렬 (먼 곳부터)
   gapUncovered.sort(function(a, b) { return b._iloomDist - a._iloomDist; });
 
-  // 지역별 그룹핑
-  var regionMap = {};
+  // 시(市) 단위 그룹핑 — 도 단위는 범위가 너무 넓어 시/군별로 세분
+  var cityMap = {};
   gapUncovered.forEach(function(s) {
-    var r = s.region || '기타';
-    if (!regionMap[r]) regionMap[r] = [];
-    regionMap[r].push(s);
+    var city = getCity(s.addr);
+    if (!cityMap[city]) cityMap[city] = { stores: [], region: s.region };
+    cityMap[city].stores.push(s);
   });
-  var regionList = Object.keys(regionMap).sort(function(a, b) {
-    return regionMap[b].length - regionMap[a].length;
-  });
+  var cityList = Object.keys(cityMap);
 
   // 지도에 표시: 일룸 커버리지 원(초록) + 커버리지 밖 경쟁사 마커(빨강)
   // 일룸 커버리지 원
@@ -2535,80 +2547,86 @@ function runCoverageAnalysis(fitView) {
   // 요약 카드
   var coveredCount = competitors.length - uncoveredAllCount;
   var covPct = competitors.length > 0 ? Math.round(coveredCount / competitors.length * 100) : 0;
-  var summaryHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
-    '<span style="color:var(--text);">커버리지 <strong style="color:#34d399;">' + covPct + '%</strong></span>' +
-    '<span style="font-size:11px;color:var(--text-dim);">' + coveredCount + '/' + competitors.length + '개 매장</span>' +
-  '</div>' +
-  '<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;">' +
-    '<div style="width:' + covPct + '%;height:100%;background:#34d399;border-radius:3px;"></div>' +
-  '</div>' +
-  '<div style="margin-top:8px;font-size:12px;">' +
-    '<span style="color:#f87171;font-weight:600;">경쟁사 2개+ 몰린 공백 ' + gapUncovered.length + '곳</span>' +
-  '</div>';
+  var modeLabel = isMetro ? '수도권' : '지방';
+  var summaryHtml =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+      '<span style="color:var(--text);font-size:13px;">일룸 커버리지 <strong style="color:#34d399;font-size:16px;">' + covPct + '%</strong></span>' +
+      '<span style="font-size:11px;color:var(--text-dim);">경쟁사 ' + coveredCount + '/' + competitors.length + '곳</span>' +
+    '</div>' +
+    '<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;">' +
+      '<div style="width:' + covPct + '%;height:100%;background:#34d399;border-radius:3px;"></div>' +
+    '</div>' +
+    '<div style="font-size:10px;color:var(--text-dim);margin-top:5px;">' + modeLabel + ' 경쟁사 매장 중 일룸 반경 ' + coverageRadius + 'km 안에 든 비율</div>' +
+    '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">' +
+      '<div style="font-size:15px;"><span style="color:#f87171;font-weight:700;">🎯 공백 상권 ' + cityList.length + '곳</span></div>' +
+      '<div style="font-size:11px;color:#cbd5e1;margin-top:3px;line-height:1.5;">일룸이 없는데 경쟁사가 2곳 이상 몰린 지역 <span style="color:var(--text-dim);">(경쟁사 총 ' + gapUncovered.length + '개)</span></div>' +
+    '</div>';
   document.getElementById('gapSummary').innerHTML = summaryHtml;
 
-  // 출점 우선순위 스코어 계산: 경쟁사 수 × √(지역 인구/만명)
-  //   - 경쟁사 많고 인구 많은 지역 = 시장 크고 경쟁만 존재하는 공백
-  //   - 제곱근으로 인구 격차(경기 1362만 vs 전남 181만) 완충
-  var regionScores = {};
-  regionList.forEach(function(region) {
-    var stores = regionMap[region];
-    var pop = (typeof POPULATION_DATA !== 'undefined' && POPULATION_DATA[region]) ? POPULATION_DATA[region].pop : 0;
-    var popMan = pop / 10000;
-    // 커버리지 밖 경쟁사들의 25년 매출 합 (= 미충족 시장 규모)
+  // 출점 매력도: 경쟁사 수 × √(경쟁매출/억) — 경쟁 많고 매출 클수록 = 검증된 큰 시장인데 일룸 공백
+  //   (인구는 도 단위 데이터뿐이라 시 단위 순위엔 부정확 → 매장 밀집 + 경쟁매출로 판단)
+  var cityScores = {};
+  cityList.forEach(function(city) {
+    var stores = cityMap[city].stores;
     var compSales = stores.reduce(function(sum, s) {
       var sd = (typeof findSalesData === 'function') ? findSalesData(s.brand, s.name, s.region) : null;
       return sum + (sd ? (sd.s25 || 0) : 0);
     }, 0);
     var compSalesEok = compSales / 1e8;
-    // 점수 = 경쟁사수 × √(인구/만명) × √(경쟁매출/억)  (경쟁밀도 × 잠재수요 × 실수요)
-    var score = stores.length * Math.sqrt(popMan) * Math.sqrt(compSalesEok > 0 ? compSalesEok : 1);
-    regionScores[region] = { score: Math.round(score), pop: pop, popMan: popMan, compSales: compSales, compSalesEok: compSalesEok };
+    var raw = stores.length * Math.sqrt(compSalesEok > 0 ? compSalesEok : 0.25);
+    cityScores[city] = { raw: raw, compSales: compSales, compSalesEok: compSalesEok, count: stores.length };
   });
-  // 스코어 내림차순 재정렬
-  regionList.sort(function(a, b) { return regionScores[b].score - regionScores[a].score; });
-  var topScore = regionList.length > 0 ? regionScores[regionList[0]].score : 0;
+  // 매력도 내림차순 정렬 + 0~100 정규화(1위=100)
+  cityList.sort(function(a, b) { return cityScores[b].raw - cityScores[a].raw; });
+  var topRaw = cityList.length > 0 ? cityScores[cityList[0]].raw : 0;
+  cityList.forEach(function(city) {
+    cityScores[city].attract = topRaw > 0 ? Math.round(cityScores[city].raw / topRaw * 100) : 0;
+  });
 
-  // 결과 리스트: 지역별 그룹 (스코어 정렬)
-  var html = '';
-  regionList.forEach(function(region, idx) {
-    var stores = regionMap[region];
-    var scoreData = regionScores[region];
+  // 결과 리스트: 시(市)별 그룹 (매력도 정렬)
+  var html = '<div style="padding:9px 16px;font-size:11px;color:var(--text-dim);border-bottom:1px solid var(--border);">집중 후보 — <span style="color:#fbbf24;">출점 매력도</span> 높은 순</div>';
+  cityList.forEach(function(city, idx) {
+    var stores = cityMap[city].stores;
+    var sc = cityScores[city];
     var brandCount = {};
-    stores.forEach(function(s) {
-      brandCount[s.brand] = (brandCount[s.brand] || 0) + 1;
-    });
-    var isTop3 = idx < 3 && scoreData.score > 0;
+    stores.forEach(function(s) { brandCount[s.brand] = (brandCount[s.brand] || 0) + 1; });
+    var isTop3 = idx < 3 && sc.raw > 0;
     var rankBadge = isTop3
-      ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#fbbf24;color:#000;font-weight:700;margin-right:6px;">🔥 집중 후보 ' + (idx + 1) + '위</span>'
-      : '';
-    var popStr = scoreData.popMan >= 100 ? (scoreData.popMan / 100).toFixed(1) + '백만' : Math.round(scoreData.popMan) + '만';
+      ? '<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#fbbf24;color:#000;font-weight:700;margin-right:6px;">🔥 집중 ' + (idx + 1) + '위</span>'
+      : '<span style="font-size:12px;color:var(--text-dim);font-weight:700;margin-right:7px;">' + (idx + 1) + '</span>';
+    var salesStr = sc.compSalesEok >= 1 ? sc.compSalesEok.toFixed(0) + '억' : Math.round(sc.compSales / 1e4) + '만';
+    var barColor = sc.attract >= 66 ? '#ef4444' : (sc.attract >= 33 ? '#fbbf24' : '#94a3b8');
 
-    html += '<div style="padding:10px 16px;border-bottom:1px solid var(--border);">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
-        '<span style="font-weight:700;font-size:13px;">' + rankBadge + region + '</span>' +
-        '<span style="font-size:11px;color:#f87171;font-weight:600;">' + stores.length + '개 매장</span>' +
+    html += '<div style="padding:12px 16px;border-bottom:1px solid var(--border);">' +
+      // 도시명 + 경쟁사 수
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">' +
+        '<span style="font-weight:700;font-size:14px;">' + rankBadge + city + ' <span style="font-size:11px;color:var(--text-dim);font-weight:400;">' + cityMap[city].region + '</span></span>' +
+        '<span style="font-size:11px;color:#f87171;font-weight:600;white-space:nowrap;">경쟁사 ' + stores.length + '곳</span>' +
       '</div>' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:11px;">' +
-        '<span style="color:#cbd5e1;">인구 <strong style="color:#fff;font-family:DM Mono,monospace;">' + popStr + '</strong></span>' +
-        '<span style="color:#cbd5e1;">경쟁매출 <strong style="color:#fff;font-family:DM Mono,monospace;">' + (scoreData.compSalesEok >= 1 ? scoreData.compSalesEok.toFixed(0) + '억' : Math.round(scoreData.compSales/1e4) + '만') + '</strong></span>' +
+      // 출점 매력도 바 (큼)
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+        '<span style="font-size:10px;color:var(--text-dim);white-space:nowrap;">출점 매력도</span>' +
+        '<div style="flex:1;height:14px;background:var(--border);border-radius:7px;overflow:hidden;">' +
+          '<div style="width:' + Math.max(sc.attract, 4) + '%;height:100%;background:' + barColor + ';border-radius:7px;"></div>' +
+        '</div>' +
+        '<span style="font-size:19px;font-weight:800;font-family:DM Mono,monospace;color:' + barColor + ';min-width:32px;text-align:right;">' + sc.attract + '</span>' +
       '</div>' +
-      '<div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:6px;font-size:11px;">' +
-        '<span style="color:#cbd5e1;">출점 우선순위 <strong style="color:#fbbf24;font-family:DM Mono,monospace;">' + scoreData.score + '점</strong></span>' +
-      '</div>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' +
-        Object.keys(brandCount).map(function(b) {
-          return '<span style="font-size:10px;padding:2px 6px;border-radius:3px;color:#fff;background:' + (BRAND_COLORS[b]||'#888') + ';">' + b + ' ' + brandCount[b] + '</span>';
-        }).join('') +
+      // 드라이버: 브랜드칩 + 경쟁매출
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">' +
+        '<div style="display:flex;gap:5px;flex-wrap:wrap;">' +
+          Object.keys(brandCount).map(function(b) {
+            return '<span style="font-size:10px;padding:2px 6px;border-radius:3px;color:#fff;background:' + (BRAND_COLORS[b]||'#888') + ';">' + b + ' ' + brandCount[b] + '</span>';
+          }).join('') +
+        '</div>' +
+        '<span style="font-size:11px;color:#cbd5e1;white-space:nowrap;">경쟁매출 <strong style="color:#fff;font-family:DM Mono,monospace;">' + salesStr + '</strong></span>' +
       '</div>';
 
     stores.forEach(function(s) {
-      html += '<div class="gap-zone" onclick="focusStore(' + s.id + ')" style="padding:8px 10px;margin-bottom:4px;">' +
+      html += '<div class="gap-zone" onclick="focusStore(' + s.id + ')" style="padding:7px 10px;margin-bottom:4px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
           '<span><span style="color:' + (BRAND_COLORS[s.brand]||'#888') + ';font-weight:600;">' + s.brand + '</span> ' + displayName(s) + '</span>' +
           '<span style="font-size:10px;color:#f87171;font-family:DM Mono,monospace;">' + s._iloomDist.toFixed(1) + 'km</span>' +
         '</div>' +
-        '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">가장 가까운 일룸: ' + (s._nearestIloom ? displayName(s._nearestIloom) : '-') + '</div>' +
       '</div>';
     });
 
