@@ -415,6 +415,9 @@
         <span id="gapRadiusBtns" style="display:flex;gap:6px;flex-wrap:wrap;"></span>
       </div>
       <div id="gapRadiusNote" style="font-size:10px;color:var(--text-dim);line-height:1.5;">지역별 기준 자동 적용 — 수도권·광역시 5km · 그 외 10km. 지역을 선택하면 반경 조정 가능.</div>
+      <div style="margin-top:12px;">
+        <button id="gapCompToggle" class="gap-radius-btn active" onclick="toggleGapCompMarkers()" style="width:100%;padding:7px 0;font-size:12px;">🏬 경쟁사 마커 ON</button>
+      </div>
       <div id="gapSummary" style="margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;"></div>
       <div style="margin-top:10px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:#cbd5e1;line-height:1.6;">
         <strong style="color:#fbbf24;font-size:12px;">출점 매력도 (0~100)</strong><br>
@@ -424,7 +427,7 @@
         <div style="font-size:11px;color:#94a3b8;margin-bottom:5px;font-weight:700;">범례</div>
         <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:#ef4444;vertical-align:middle;margin-right:8px;"></span>공백 핫스팟 (일룸X · 경쟁사 2곳+)</div>
         <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;border:2px solid #34d399;background:rgba(52,211,153,0.15);box-sizing:border-box;vertical-align:middle;margin-right:8px;"></span>일룸 커버리지 반경</div>
-        <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:#94a3b8;vertical-align:middle;margin-right:8px;"></span>경쟁사 위치</div>
+        <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:#94a3b8;vertical-align:middle;margin-right:8px;"></span>경쟁사 위치 <span style="color:var(--text-dim);font-size:11px;">(마커 OFF 시 회색점)</span></div>
       </div>
     </div>
     <div class="store-list" id="gapResults" style="font-size:12px;"></div>
@@ -949,6 +952,53 @@ function drawDistrictBoundaries(region) {
   console.log('생성된 폴리곤:', districtPolygons.length);
 }
 
+// 지역(시·도) 행정경계 bounding box. 경계 폴리곤 우선, 없으면 매장 좌표.
+function getRegionBBox(region) {
+  var minLat=90,maxLat=-90,minLng=180,maxLng=-180,found=false;
+  if (typeof DISTRICT_BOUNDARIES !== 'undefined') {
+    DISTRICT_BOUNDARIES.filter(function(d){ return d.sido === region; }).forEach(function(d){
+      var polys = d.type === 'MultiPolygon' ? d.coords : [d.coords];
+      polys.forEach(function(poly){
+        (poly[0] || []).forEach(function(c){
+          var lng=c[0], lat=c[1];
+          if(lat<minLat)minLat=lat; if(lat>maxLat)maxLat=lat;
+          if(lng<minLng)minLng=lng; if(lng>maxLng)maxLng=lng;
+          found=true;
+        });
+      });
+    });
+  }
+  if (!found) {
+    allStores.filter(function(s){ return s.region === region; }).forEach(function(s){
+      if(s.lat<minLat)minLat=s.lat; if(s.lat>maxLat)maxLat=s.lat;
+      if(s.lng<minLng)minLng=s.lng; if(s.lng>maxLng)maxLng=s.lng;
+      found=true;
+    });
+  }
+  return { minLat:minLat, maxLat:maxLat, minLng:minLng, maxLng:maxLng, found:found };
+}
+
+function applyMapBounds(minLat,minLng,maxLat,maxLng,pad) {
+  pad = pad || 60;
+  if (mapEngine === 'kakao' && mapObj) {
+    mapObj.setBounds(new kakao.maps.LatLngBounds(new kakao.maps.LatLng(minLat,minLng), new kakao.maps.LatLng(maxLat,maxLng)), pad, pad, pad, pad);
+  } else if (mapEngine === 'leaflet' && mapObj) {
+    mapObj.fitBounds([[minLat,minLng],[maxLat,maxLng]], { padding:[pad,pad], animate:true });
+  }
+}
+
+// 지역 전체가 화면에 꽉 차게 이동 (전체=전국 매장 분포)
+function fitMapToRegion(region, pad) {
+  if (region === '전체') {
+    var mnLat=90,mxLat=-90,mnLng=180,mxLng=-180;
+    allStores.forEach(function(s){ if(s.lat<mnLat)mnLat=s.lat; if(s.lat>mxLat)mxLat=s.lat; if(s.lng<mnLng)mnLng=s.lng; if(s.lng>mxLng)mxLng=s.lng; });
+    applyMapBounds(mnLat,mnLng,mxLat,mxLng,pad||50);
+    return;
+  }
+  var b = getRegionBBox(region);
+  if (b.found) applyMapBounds(b.minLat,b.minLng,b.maxLat,b.maxLng,pad||70);
+}
+
 function setFilter(region) {
   activeFilter = region;
   document.querySelectorAll('#regionFilters .region-btn').forEach(function(btn) {
@@ -960,69 +1010,9 @@ function setFilter(region) {
   if (document.getElementById('regionDashboard').classList.contains('visible')) {
     showRegionDashboard(region);
   }
-  // 해당 지역으로 지도 이동: 시도 경계 폴리곤의 bounding box 우선 사용
-  if (region === '전체') {
-    // 전국 매장 좌표 기반 bbox (실제 매장 분포로 fit)
-    var minLat=90,maxLat=-90,minLng=180,maxLng=-180;
-    allStores.forEach(function(s) {
-      if (s.lat < minLat) minLat = s.lat;
-      if (s.lat > maxLat) maxLat = s.lat;
-      if (s.lng < minLng) minLng = s.lng;
-      if (s.lng > maxLng) maxLng = s.lng;
-    });
-    var pad = 50;
-    if (mapEngine === 'kakao' && mapObj) {
-      var bounds = new kakao.maps.LatLngBounds(
-        new kakao.maps.LatLng(minLat, minLng),
-        new kakao.maps.LatLng(maxLat, maxLng)
-      );
-      mapObj.setBounds(bounds, pad, pad, pad, pad);
-    } else if (mapEngine === 'leaflet' && mapObj) {
-      mapObj.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [pad, pad], animate: true });
-    }
-  } else {
-    var minLat=90,maxLat=-90,minLng=180,maxLng=-180;
-    var found = false;
-    // 1순위: 매장 좌표로 bbox (도심 위주로 자연스럽게 fit)
-    var regionStores = allStores.filter(function(s) { return s.region === region; });
-    regionStores.forEach(function(s) {
-      if (s.lat < minLat) minLat = s.lat;
-      if (s.lat > maxLat) maxLat = s.lat;
-      if (s.lng < minLng) minLng = s.lng;
-      if (s.lng > maxLng) maxLng = s.lng;
-      found = true;
-    });
-    // 2순위: 매장이 없을 경우 경계 폴리곤
-    if (!found && typeof DISTRICT_BOUNDARIES !== 'undefined') {
-      var sidoBoundaries = DISTRICT_BOUNDARIES.filter(function(d) { return d.sido === region; });
-      sidoBoundaries.forEach(function(d) {
-        var polys = d.type === 'MultiPolygon' ? d.coords : [d.coords];
-        polys.forEach(function(poly) {
-          var outer = poly[0];
-          if (!outer) return;
-          outer.forEach(function(c) {
-            var lng = c[0], lat = c[1];
-            if (lat < minLat) minLat = lat;
-            if (lat > maxLat) maxLat = lat;
-            if (lng < minLng) minLng = lng;
-            if (lng > maxLng) maxLng = lng;
-            found = true;
-          });
-        });
-      });
-    }
-    if (found) {
-      // 패널 열려있으면 좌측 패딩 더 크게
-      var dashOpen = document.getElementById('regionDashboard').classList.contains('visible');
-      var pad = dashOpen ? 60 : 80;
-      if (mapEngine === 'kakao' && mapObj) {
-        var bounds = new kakao.maps.LatLngBounds(new kakao.maps.LatLng(minLat, minLng), new kakao.maps.LatLng(maxLat, maxLng));
-        mapObj.setBounds(bounds, pad, pad, pad, pad);
-      } else if (mapEngine === 'leaflet' && mapObj) {
-        mapObj.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [pad, pad], animate: true });
-      }
-    }
-  }
+  // 해당 지역 행정경계 전체가 보이도록 fit (매장 밀집부가 아니라 시·도 전체 범위)
+  var dashOpen = document.getElementById('regionDashboard').classList.contains('visible');
+  fitMapToRegion(region, dashOpen ? 60 : 70);
 }
 
 // ══════════════════════════════════════════
@@ -2349,6 +2339,7 @@ var gapUncovered = [];
 var currentView = 'map';
 var gapRegion = '전체';
 var coverageRadius = 5; // km (특정 지역 선택 시 사용)
+var gapShowCompMarkers = true; // 공백분석 경쟁사 마커 표시 여부(ON=색상 핀 / OFF=회색 점)
 var GAP_METRO_SET = ['서울','경기','인천','대전','대구','부산','울산','광주']; // 3/5/7/10km 그룹
 var GAP_REGIONS = ['전체','서울','인천','경기','대전','충북','충남','대구','경북','부산','울산','경남','광주','전북','전남','강원','제주'];
 
@@ -2432,6 +2423,16 @@ function setCoverageRadius(r) {
   if (gapActive) runCoverageAnalysis();
 }
 
+function toggleGapCompMarkers() {
+  gapShowCompMarkers = !gapShowCompMarkers;
+  var btn = document.getElementById('gapCompToggle');
+  if (btn) {
+    btn.classList.toggle('active', gapShowCompMarkers);
+    btn.textContent = gapShowCompMarkers ? '🏬 경쟁사 마커 ON' : '🏬 경쟁사 마커 OFF';
+  }
+  if (gapActive) runCoverageAnalysis(); // 화면 유지, 표시만 갱신
+}
+
 function clearGapOverlays() {
   gapCircles.forEach(function(c) {
     if (mapEngine === 'kakao') c.setMap(null);
@@ -2510,20 +2511,23 @@ function runCoverageAnalysis(fitView) {
     }
   });
 
-  // 경쟁사는 색상 핀 대신 전부 회색 점으로 표시 = '경쟁사 위치' (공백 클러스터는 위에 빨강 히트로 강조)
-  candidateComp.forEach(function(c) {
-    var dr = dotOf(c.region);
-    if (mapEngine === 'kakao' && mapObj) {
-      gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(c.lat, c.lng), radius: dr, strokeWeight: 0, fillColor: '#94a3b8', fillOpacity: 0.5, map: mapObj }));
-    } else if (mapEngine === 'leaflet' && mapObj) {
-      gapCircles.push(L.circle([c.lat, c.lng], { radius: dr, stroke: false, fillColor: '#94a3b8', fillOpacity: 0.5 }).addTo(mapObj));
-    }
-  });
+  // 경쟁사 마커 OFF일 때만 회색 점으로 위치 표시 (ON이면 아래에서 색상 핀으로 표시)
+  if (!gapShowCompMarkers) {
+    candidateComp.forEach(function(c) {
+      var dr = dotOf(c.region);
+      if (mapEngine === 'kakao' && mapObj) {
+        gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(c.lat, c.lng), radius: dr, strokeWeight: 0, fillColor: '#94a3b8', fillOpacity: 0.5, map: mapObj }));
+      } else if (mapEngine === 'leaflet' && mapObj) {
+        gapCircles.push(L.circle([c.lat, c.lng], { radius: dr, stroke: false, fillColor: '#94a3b8', fillOpacity: 0.5 }).addTo(mapObj));
+      }
+    });
+  }
 
-  // 마커 표시: 일룸만 (경쟁사는 회색 점 + 빨강 히트로만 표현 — 색상 핀 노출 안 함)
+  // 마커 표시: 일룸 항상 / 경쟁사는 토글 ON일 때만 색상 핀 (빨강 히트는 항상)
   allStores.forEach(function(store) {
     if (!store.marker) return;
-    var show = store.brand === '일룸' && (isAll || store.region === gapRegion);
+    var inScope = isAll || store.region === gapRegion;
+    var show = inScope && (store.brand === '일룸' || gapShowCompMarkers);
     if (mapEngine === 'kakao') store.marker.setMap(show ? mapObj : null);
     else if (mapEngine === 'leaflet') {
       if (show) { if (!mapObj.hasLayer(store.marker)) store.marker.addTo(mapObj); }
@@ -2532,21 +2536,8 @@ function runCoverageAnalysis(fitView) {
   });
 
   // 줌 — 지역 전환/최초 진입 때만(fitView). 반경 변경 시엔 보던 화면 유지.
-  if (fitView) {
-    if (isAll) {
-      if (mapEngine === 'kakao' && mapObj) { mapObj.setCenter(new kakao.maps.LatLng(36.3, 127.8)); mapObj.setLevel(13); }
-      else if (mapEngine === 'leaflet' && mapObj) { mapObj.setView([36.3, 127.8], 7, { animate: true }); }
-    } else {
-      var pts = allStores.filter(function(s) { return s.region === gapRegion; });
-      if (pts.length && mapEngine === 'kakao' && mapObj) {
-        var bounds = new kakao.maps.LatLngBounds();
-        pts.forEach(function(p) { bounds.extend(new kakao.maps.LatLng(p.lat, p.lng)); });
-        mapObj.setBounds(bounds);
-      } else if (pts.length && mapEngine === 'leaflet' && mapObj) {
-        mapObj.fitBounds(pts.map(function(p) { return [p.lat, p.lng]; }), { padding: [40, 40] });
-      }
-    }
-  }
+  // 지역 전체(행정경계)가 화면에 꽉 차게 (유통망 지도와 동일 기준)
+  if (fitView) fitMapToRegion(gapRegion, 60);
 
   // 요약 카드
   var coveredCount = candidateComp.length - uncoveredAllCount;
