@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>일룸 유통망 대시보드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="iloom_stores_data.js"></script>
+<script src="competitors_data.js"></script>
+<script src="sales_data.js"></script>
+<script src="brand_history.js"></script>
+<style>
+:root {
+  --bg:        #0d1117;
+  --surface:   #161b22;
+  --surface2:  #1c2128;
+  --border:    #30363d;
+  --text:      #e6edf3;
+  --muted:     #8b949e;
+  --dim:       #484f58;
+  --iloom:     #c80a1e;
+  --hansem:    #3b82f6;
+  --livart:    #10b981;
+  --emons:     #f59e0b;
+  --casamia:   #8b5cf6;
+  --ok:        #3fb950;
+  --warn:      #d29922;
+  --sidebar-w: 220px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden;}
+
+/* ── Sidebar ── */
+.sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;}
+.sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.logo-mark{width:32px;height:32px;background:var(--iloom);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;letter-spacing:-0.5px;flex-shrink:0;}
+.logo-text{font-size:14px;font-weight:700;letter-spacing:-0.5px;}
+.logo-sub{font-size:10px;color:var(--muted);margin-top:1px;}
+.nav{padding:12px 8px;flex:1;}
+.nav-label{font-size:10px;color:var(--dim);font-weight:600;letter-spacing:0.6px;text-transform:uppercase;padding:8px 12px 4px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:7px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:500;transition:all .15s;margin-bottom:2px;}
+.nav-item svg{flex-shrink:0;opacity:.6;}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item:hover svg{opacity:1;}
+.nav-item.active{background:rgba(200,10,30,.12);color:var(--iloom);}
+.nav-item.active svg{color:var(--iloom);opacity:1;}
+.sidebar-footer{padding:16px 20px;border-top:1px solid var(--border);}
+.updated-badge{font-size:10px;color:var(--dim);}
+.updated-badge span{color:var(--ok);font-weight:600;}
+
+/* ── Main ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+
+/* Header */
+.header{height:56px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;flex-shrink:0;}
+.header-title{font-size:16px;font-weight:600;letter-spacing:-.4px;}
+.header-right{display:flex;align-items:center;gap:16px;}
+.agent-badge{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+.agent-dot{width:7px;height:7px;background:var(--ok);border-radius:50%;}
+.btn-icon{width:32px;height:32px;border-radius:7px;border:1px solid var(--border);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);}
+.btn-icon:hover{background:var(--surface2);color:var(--text);}
+
+/* KPI cards */
+.kpi-section{padding:16px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:12px;flex-shrink:0;overflow-x:auto;}
+.kpi-card{flex:1;min-width:140px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer;transition:border-color .15s;position:relative;overflow:hidden;}
+.kpi-card:hover{border-color:var(--brand-color);}
+.kpi-card.active-filter{border-color:var(--brand-color);box-shadow:0 0 0 1px var(--brand-color);}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--brand-color);}
+.kpi-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;font-size:14px;}
+.kpi-count{font-family:'DM Mono',monospace;font-size:28px;font-weight:500;line-height:1;color:var(--text);}
+.kpi-label{font-size:11px;color:var(--muted);margin-top:4px;font-weight:500;}
+.kpi-sub{font-size:10px;color:var(--dim);margin-top:2px;}
+
+/* Map */
+.map-wrap{flex:1;position:relative;}
+#map{width:100%;height:100%;}
+.map-legend{position:absolute;bottom:20px;left:16px;background:rgba(22,27,34,.92);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:10px;padding:12px 14px;z-index:1000;min-width:160px;}
+.legend-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);margin-bottom:5px;cursor:pointer;}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.legend-count{margin-left:auto;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);}
+
+/* Leaflet popup override */
+.leaflet-popup-content-wrapper{background:var(--surface2) !important;border:1px solid var(--border) !important;border-radius:10px !important;box-shadow:0 8px 24px rgba(0,0,0,.4) !important;padding:0 !important;}
+.leaflet-popup-content{margin:0 !important;color:var(--text);}
+.leaflet-popup-tip{background:var(--surface2) !important;}
+.leaflet-popup-close-button{color:var(--muted) !important;top:8px !important;right:10px !important;font-size:16px !important;}
+.popup-inner{padding:14px 16px;}
+.popup-brand{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.popup-brand-dot{width:8px;height:8px;border-radius:50%;}
+.popup-brand-name{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+.popup-name{font-size:15px;font-weight:600;margin-bottom:8px;line-height:1.3;}
+.popup-row{display:flex;gap:6px;font-size:12px;color:var(--muted);margin-bottom:3px;align-items:flex-start;}
+.popup-row-label{color:var(--dim);flex-shrink:0;width:32px;}
+.popup-row-val{color:var(--text);}
+.popup-sales{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:16px;}
+.popup-sales-item{text-align:center;}
+.popup-sales-val{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--text);}
+.popup-sales-label{font-size:10px;color:var(--dim);margin-top:2px;}
+.popup-sales-arrow{font-size:11px;}
+.popup-sales-arrow.up{color:var(--ok);}
+.popup-sales-arrow.down{color:var(--iloom);}
+
+/* Loading overlay */
+.loading{position:absolute;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:12px;}
+.loading-text{font-size:13px;color:var(--muted);}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--iloom);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">il</div>
+    <div>
+      <div class="logo-text">iloom</div>
+      <div class="logo-sub">유통망 관제 대시보드</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <div class="nav-label">메뉴</div>
+    <div class="nav-item active" onclick="window.location='dashboard.html'">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      대시보드
+    </div>
+    <div class="nav-item" onclick="window.location='index.html'">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+      유통망 지도
+    </div>
+    <div class="nav-label" style="margin-top:8px;">매장 현황</div>
+    <div class="nav-item" id="nav-iloom" onclick="toggleBrand('일룸')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      일룸
+    </div>
+    <div class="nav-item" id="nav-hansem" onclick="toggleBrand('한샘')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      한샘
+    </div>
+    <div class="nav-item" id="nav-livart" onclick="toggleBrand('리바트')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      리바트
+    </div>
+    <div class="nav-item" id="nav-emons" onclick="toggleBrand('에몬스')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      에몬스
+    </div>
+    <div class="nav-item" id="nav-casamia" onclick="toggleBrand('까사미아')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      까사미아
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="updated-badge">데이터 기준 <span id="updated-date">—</span></div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <!-- Header -->
+  <div class="header">
+    <span class="header-title">유통망 현황 대시보드</span>
+    <div class="header-right">
+      <div class="agent-badge">
+        <div class="agent-dot"></div>
+        <span id="total-stores">—</span> 매장 모니터링
+      </div>
+      <button class="btn-icon" title="새로고침" onclick="location.reload()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+      <button class="btn-icon" title="지도 보기" onclick="window.location='index.html'">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-section">
+    <div class="kpi-card" style="--brand-color:var(--iloom)" id="kpi-iloom" onclick="filterBrand('일룸')">
+      <div class="kpi-icon" style="background:rgba(200,10,30,.15);">🏠</div>
+      <div class="kpi-count" id="cnt-iloom">—</div>
+      <div class="kpi-label">일룸</div>
+      <div class="kpi-sub" id="sub-iloom">전국 직영·가맹</div>
+    </div>
+    <div class="kpi-card" style="--brand-color:var(--hansem)" id="kpi-hansem" onclick="filterBrand('한샘')">
+      <div class="kpi-icon" style="background:rgba(59,130,246,.15);">🏠</div>
+      <div class="kpi-count" id="cnt-hansem">—</div>
+      <div class="kpi-label">한샘</div>
+      <div class="kpi-sub">직영·대리점</div>
+    </div>
+    <div class="kpi-card" style="--brand-color:var(--livart)" id="kpi-livart" onclick="filterBrand('리바트')">
+      <div class="kpi-icon" style="background:rgba(16,185,129,.15);">🏠</div>
+      <div class="kpi-count" id="cnt-livart">—</div>
+      <div class="kpi-label">리바트</div>
+      <div class="kpi-sub">직영·대리점</div>
+    </div>
+    <div class="kpi-card" style="--brand-color:var(--emons)" id="kpi-emons" onclick="filterBrand('에몬스')">
+      <div class="kpi-icon" style="background:rgba(245,158,11,.15);">🏠</div>
+      <div class="kpi-count" id="cnt-emons">—</div>
+      <div class="kpi-label">에몬스</div>
+      <div class="kpi-sub">직영·대리점</div>
+    </div>
+    <div class="kpi-card" style="--brand-color:var(--casamia)" id="kpi-casamia" onclick="filterBrand('까사미아')">
+      <div class="kpi-icon" style="background:rgba(139,92,246,.15);">🏠</div>
+      <div class="kpi-count" id="cnt-casamia">—</div>
+      <div class="kpi-label">까사미아</div>
+      <div class="kpi-sub">직영·대리점</div>
+    </div>
+    <div class="kpi-card" style="--brand-color:#3fb950;cursor:default;" id="kpi-sales">
+      <div class="kpi-icon" style="background:rgba(63,185,80,.15);">📊</div>
+      <div class="kpi-count" id="cnt-sales" style="font-size:20px;">—</div>
+      <div class="kpi-label">일룸 '25년 매출</div>
+      <div class="kpi-sub" id="sub-sales">집계 중...</div>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div class="map-wrap">
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">매장 데이터 로딩 중...</div>
+    </div>
+    <div id="map"></div>
+
+    <!-- Legend -->
+    <div class="map-legend">
+      <div class="legend-title">브랜드 범례</div>
+      <div class="legend-item" onclick="filterBrand('일룸')">
+        <div class="legend-dot" style="background:#c80a1e;"></div>
+        일룸
+        <span class="legend-count" id="lc-iloom">—</span>
+      </div>
+      <div class="legend-item" onclick="filterBrand('한샘')">
+        <div class="legend-dot" style="background:#3b82f6;"></div>
+        한샘
+        <span class="legend-count" id="lc-hansem">—</span>
+      </div>
+      <div class="legend-item" onclick="filterBrand('리바트')">
+        <div class="legend-dot" style="background:#10b981;"></div>
+        리바트
+        <span class="legend-count" id="lc-livart">—</span>
+      </div>
+      <div class="legend-item" onclick="filterBrand('에몬스')">
+        <div class="legend-dot" style="background:#f59e0b;"></div>
+        에몬스
+        <span class="legend-count" id="lc-emons">—</span>
+      </div>
+      <div class="legend-item" onclick="filterBrand('까사미아')">
+        <div class="legend-dot" style="background:#8b5cf6;"></div>
+        까사미아
+        <span class="legend-count" id="lc-casamia">—</span>
+      </div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:10px;color:var(--dim);">
+        클릭하여 필터 / 다시 클릭 해제
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 브랜드 설정 ──
+const BRAND_CFG = {
+  '일룸':   { color: '#c80a1e', radius: 7,  weight: 1.5, opacity: .85, key: 'iloom'  },
+  '한샘':   { color: '#3b82f6', radius: 5.5, weight: 1,  opacity: .7,  key: 'hansem' },
+  '리바트': { color: '#10b981', radius: 5.5, weight: 1,  opacity: .7,  key: 'livart' },
+  '에몬스': { color: '#f59e0b', radius: 5.5, weight: 1,  opacity: .7,  key: 'emons'  },
+  '까사미아':{ color: '#8b5cf6', radius: 5.5, weight: 1,  opacity: .7,  key: 'casamia'},
+};
+
+// ── 지도 초기화 ──
+const map = L.map('map', {
+  center: [36.3, 127.9],
+  zoom: 7,
+  zoomControl: false,
+  attributionControl: false,
+});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19,
+  subdomains: 'abcd',
+}).addTo(map);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+// ── 마커 레이어 그룹 ──
+const layers = {};
+Object.keys(BRAND_CFG).forEach(b => { layers[b] = L.layerGroup().addTo(map); });
+
+let activeFilter = null;   // 현재 필터 브랜드
+const allMarkers = {};     // brand → markers[]
+
+// ── 매출 데이터 인덱스 ──
+function buildSalesIndex() {
+  const idx = {};
+  if (typeof SALES_DATA === 'undefined') return idx;
+  SALES_DATA.forEach(d => { idx[d.store] = d; });
+  return idx;
+}
+const salesIdx = buildSalesIndex();
+
+function getSales(storeName) {
+  // 직접 매칭
+  let d = salesIdx[storeName];
+  if (!d) {
+    // 부분 매칭 (숫자 제거 후)
+    const base = storeName.replace(/\d+$/, '').trim();
+    d = Object.values(salesIdx).find(s => s.store.startsWith(base));
+  }
+  return d || null;
+}
+
+function fmtSales(v) {
+  if (!v || v <= 0) return null;
+  const hun = Math.round(v / 1e8);
+  return hun >= 10 ? (hun / 10).toFixed(1) + '억' : hun + '억';
+}
+
+// ── 마커 생성 ──
+function makeCircle(lat, lng, cfg) {
+  return L.circleMarker([lat, lng], {
+    radius:      cfg.radius,
+    color:       cfg.color,
+    fillColor:   cfg.color,
+    fillOpacity: cfg.opacity,
+    weight:      cfg.weight,
+  });
+}
+
+function makePopup(brand, name, extra) {
+  const cfg = BRAND_CFG[brand] || { color: '#888' };
+  const { addr, stype, type, phone } = extra;
+  const salesD = name ? getSales(name) : null;
+  let salesHtml = '';
+  if (salesD) {
+    const s24 = fmtSales(salesD.s24);
+    const s25 = fmtSales(salesD.s25);
+    const diff = salesD.s25 && salesD.s24 ? salesD.s25 - salesD.s24 : null;
+    const arrow = diff ? (diff > 0 ? '<span class="popup-sales-arrow up">↑</span>' : '<span class="popup-sales-arrow down">↓</span>') : '';
+    salesHtml = `
+    <div class="popup-sales">
+      ${s24 ? `<div class="popup-sales-item"><div class="popup-sales-val">${s24}</div><div class="popup-sales-label">'24년</div></div>` : ''}
+      ${s25 ? `<div class="popup-sales-item"><div class="popup-sales-val">${s25} ${arrow}</div><div class="popup-sales-label">'25년</div></div>` : ''}
+    </div>`;
+  }
+  const typeLabel = type === 'P' ? '프리미엄샵' : (type === 'B' ? '일반매장' : (stype || ''));
+  return `<div class="popup-inner">
+    <div class="popup-brand">
+      <div class="popup-brand-dot" style="background:${cfg.color}"></div>
+      <span class="popup-brand-name">${brand}${typeLabel ? ' · ' + typeLabel : ''}</span>
+    </div>
+    <div class="popup-name">${name}</div>
+    ${addr ? `<div class="popup-row"><span class="popup-row-label">주소</span><span class="popup-row-val">${addr}</span></div>` : ''}
+    ${phone ? `<div class="popup-row"><span class="popup-row-label">전화</span><span class="popup-row-val">${phone}</span></div>` : ''}
+    ${salesHtml}
+  </div>`;
+}
+
+// ── 데이터 로드 ──
+function loadData() {
+  allMarkers['일룸'] = [];
+  // 일룸 매장
+  if (typeof ILOOM_STORES !== 'undefined') {
+    ILOOM_STORES.forEach(s => {
+      if (!s.lat || !s.lng) return;
+      const cfg = BRAND_CFG['일룸'];
+      const m = makeCircle(parseFloat(s.lat), parseFloat(s.lng), cfg);
+      m.bindPopup(makePopup('일룸', s.name, { addr: s.addr, type: s.type, phone: s.phone }), { maxWidth: 280 });
+      m.addTo(layers['일룸']);
+      allMarkers['일룸'].push(m);
+    });
+  }
+
+  // 경쟁사
+  if (typeof COMPETITORS_RAW !== 'undefined') {
+    const compBrands = ['한샘', '리바트', '에몬스', '까사미아'];
+    compBrands.forEach(b => { allMarkers[b] = []; });
+    COMPETITORS_RAW.forEach(s => {
+      const b = s.brand;
+      if (!BRAND_CFG[b] || !s.lat || !s.lng) return;
+      const m = makeCircle(s.lat, s.lng, BRAND_CFG[b]);
+      m.bindPopup(makePopup(b, s.name || s.place_name, { addr: s.addr, stype: s.stype }), { maxWidth: 260 });
+      m.addTo(layers[b]);
+      if (!allMarkers[b]) allMarkers[b] = [];
+      allMarkers[b].push(m);
+    });
+  }
+
+  updateCounts();
+  updateKpiSales();
+  document.getElementById('loading').style.display = 'none';
+
+  // 업데이트 날짜
+  if (typeof BRAND_CRITERIA !== 'undefined' && BRAND_CRITERIA.lastUpdated) {
+    document.getElementById('updated-date').textContent = BRAND_CRITERIA.lastUpdated;
+  }
+}
+
+// ── KPI 카운트 업데이트 ──
+function updateCounts() {
+  const counts = {};
+  Object.keys(allMarkers).forEach(b => { counts[b] = allMarkers[b].length; });
+
+  const keyMap = { '일룸':'iloom', '한샘':'hansem', '리바트':'livart', '에몬스':'emons', '까사미아':'casamia' };
+  let total = 0;
+  Object.entries(counts).forEach(([b, c]) => {
+    const k = keyMap[b];
+    if (k) {
+      document.getElementById('cnt-' + k).textContent = c;
+      document.getElementById('lc-' + k).textContent = c;
+      total += c;
+    }
+  });
+  document.getElementById('total-stores').textContent = total.toLocaleString();
+
+  // 일룸 서브텍스트
+  const p = counts['일룸'] ? (ILOOM_STORES || []).filter(s => s.type === 'P').length : 0;
+  const b = counts['일룸'] ? counts['일룸'] - p : 0;
+  document.getElementById('sub-iloom').textContent = `프리미엄샵 ${p} · 일반 ${b}`;
+}
+
+// ── 일룸 매출 KPI ──
+function updateKpiSales() {
+  if (typeof SALES_DATA === 'undefined') return;
+  const now = new Date();
+  const cutoff = `${now.getFullYear() - 1}-12`;
+  let total25 = 0, stores25 = 0;
+  SALES_DATA.forEach(d => {
+    if (d.brand === '일룸' && d.s25 > 0) { total25 += d.s25; stores25++; }
+  });
+  const hun = Math.round(total25 / 1e8);
+  const display = hun >= 1000 ? (hun / 10).toFixed(0) + '억' : hun + '억';
+  const disp2 = total25 >= 1e12 ? (total25 / 1e12).toFixed(2) + '조' : display;
+  document.getElementById('cnt-sales').textContent = disp2;
+  document.getElementById('sub-sales').textContent = `${stores25}개 매장 집계`;
+}
+
+// ── 브랜드 필터 ──
+function filterBrand(brand) {
+  if (activeFilter === brand) {
+    // 해제 → 전체 표시
+    activeFilter = null;
+    Object.keys(BRAND_CFG).forEach(b => {
+      layers[b].addTo(map);
+      const card = document.getElementById('kpi-' + BRAND_CFG[b].key);
+      if (card) card.classList.remove('active-filter');
+    });
+  } else {
+    activeFilter = brand;
+    Object.keys(BRAND_CFG).forEach(b => {
+      if (b === brand) {
+        layers[b].addTo(map);
+        const card = document.getElementById('kpi-' + BRAND_CFG[b].key);
+        if (card) card.classList.add('active-filter');
+      } else {
+        map.removeLayer(layers[b]);
+        const card = document.getElementById('kpi-' + BRAND_CFG[b].key);
+        if (card) card.classList.remove('active-filter');
+      }
+    });
+    // 해당 브랜드 fit bounds
+    if (allMarkers[brand] && allMarkers[brand].length > 0) {
+      const group = L.featureGroup(allMarkers[brand]);
+      map.fitBounds(group.getBounds().pad(0.1));
+    }
+  }
+}
+
+function toggleBrand(brand) { filterBrand(brand); }
+
+// ── 실행 ──
+window.addEventListener('load', loadData);
+</script>
+</body>
+</html>
