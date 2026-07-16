@@ -424,7 +424,7 @@
         <div style="font-size:11px;color:#94a3b8;margin-bottom:5px;font-weight:700;">범례</div>
         <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:#ef4444;vertical-align:middle;margin-right:8px;"></span>공백 핫스팟 (일룸X · 경쟁사 2곳+)</div>
         <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;border:2px solid #34d399;background:rgba(52,211,153,0.15);box-sizing:border-box;vertical-align:middle;margin-right:8px;"></span>일룸 커버리지 반경</div>
-        <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:#94a3b8;vertical-align:middle;margin-right:8px;"></span>그 외 경쟁사 (커버됨·고립)</div>
+        <div><span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:#94a3b8;vertical-align:middle;margin-right:8px;"></span>경쟁사 위치</div>
       </div>
     </div>
     <div class="store-list" id="gapResults" style="font-size:12px;"></div>
@@ -2510,25 +2510,20 @@ function runCoverageAnalysis(fitView) {
     }
   });
 
-  var uncoveredIds = {};
-  gapUncovered.forEach(function(s) { uncoveredIds[s.id] = true; });
-
-  // 공백 클러스터가 아닌 나머지 경쟁사는 회색 점으로 흐리게 (경쟁 지형 컨텍스트)
+  // 경쟁사는 색상 핀 대신 전부 회색 점으로 표시 = '경쟁사 위치' (공백 클러스터는 위에 빨강 히트로 강조)
   candidateComp.forEach(function(c) {
-    if (uncoveredIds[c.id]) return;
     var dr = dotOf(c.region);
     if (mapEngine === 'kakao' && mapObj) {
-      gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(c.lat, c.lng), radius: dr, strokeWeight: 0, fillColor: '#94a3b8', fillOpacity: 0.45, map: mapObj }));
+      gapCircles.push(new kakao.maps.Circle({ center: new kakao.maps.LatLng(c.lat, c.lng), radius: dr, strokeWeight: 0, fillColor: '#94a3b8', fillOpacity: 0.5, map: mapObj }));
     } else if (mapEngine === 'leaflet' && mapObj) {
-      gapCircles.push(L.circle([c.lat, c.lng], { radius: dr, stroke: false, fillColor: '#94a3b8', fillOpacity: 0.45 }).addTo(mapObj));
+      gapCircles.push(L.circle([c.lat, c.lng], { radius: dr, stroke: false, fillColor: '#94a3b8', fillOpacity: 0.5 }).addTo(mapObj));
     }
   });
 
-  // 마커 표시: (선택 지역의) 일룸 + 커버리지 밖 경쟁사
+  // 마커 표시: 일룸만 (경쟁사는 회색 점 + 빨강 히트로만 표현 — 색상 핀 노출 안 함)
   allStores.forEach(function(store) {
     if (!store.marker) return;
-    var inScope = isAll ? true : (store.region === gapRegion);
-    var show = inScope && (store.brand === '일룸' || uncoveredIds[store.id]);
+    var show = store.brand === '일룸' && (isAll || store.region === gapRegion);
     if (mapEngine === 'kakao') store.marker.setMap(show ? mapObj : null);
     else if (mapEngine === 'leaflet') {
       if (show) { if (!mapObj.hasLayer(store.marker)) store.marker.addTo(mapObj); }
