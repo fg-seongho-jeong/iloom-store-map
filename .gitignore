@@ -12,3 +12,7 @@ diff_report.md
 pending_changes.json
 applied_*.json
 competitors_data.backup.*.js
+
+# 내부 전용 - 공개 배포 금지
+dashboard.html
+iloom_stores_data.js
