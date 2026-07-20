@@ -2007,8 +2007,9 @@ function relayoutMap() {
   } else if (mapEngine === 'leaflet' && mapObj && mapObj.invalidateSize) {
     mapObj.invalidateSize();
   }
-  // 패널 토글 후 현재 지역으로 다시 fit
-  if (activeFilter && activeFilter !== '전체') {
+  // 패널 토글 후 현재 지역으로 다시 fit — 단, 공백분석 뷰에선 gap이 지역/줌을 직접 관리하므로 건너뜀
+  // (안 그러면 지도뷰에서 특정 지역을 보다 공백분석 진입 시 closeRegionDashboard→relayoutMap이 그 지역으로 되돌려버림)
+  if (!gapActive && activeFilter && activeFilter !== '전체') {
     setFilter(activeFilter);
   }
 }
