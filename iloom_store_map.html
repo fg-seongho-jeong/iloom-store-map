@@ -2007,11 +2007,10 @@ function relayoutMap() {
   } else if (mapEngine === 'leaflet' && mapObj && mapObj.invalidateSize) {
     mapObj.invalidateSize();
   }
-  // 패널 토글 후 현재 지역으로 다시 fit — 단, 공백분석 뷰에선 gap이 지역/줌을 직접 관리하므로 건너뜀
-  // (안 그러면 지도뷰에서 특정 지역을 보다 공백분석 진입 시 closeRegionDashboard→relayoutMap이 그 지역으로 되돌려버림)
-  if (!gapActive && activeFilter && activeFilter !== '전체') {
-    setFilter(activeFilter);
-  }
+  // 크기 보정 후 "현재 보고 있는 뷰의 지역"으로만 다시 fit.
+  // (setFilter로 지도뷰 지역을 강제 재적용하면 공백분석 뷰에서 부산→충남처럼 되돌아가는 버그 발생)
+  var region = (currentView === 'gap') ? gapRegion : activeFilter;
+  if (region && region !== '전체') fitMapToRegion(region, currentView === 'gap' ? 60 : 70);
 }
 
 function closeCompare() {
